@@ -1,0 +1,1909 @@
+{
+  "schema": 1,
+  "version": "0.6.3",
+  "updated": "2026-08-26",
+  "notes": "Families are data, not code. Signals are scored by the engine; a family needs score >= thresholds.medium to be reported, else the result is unknown.crash. `role: definitive` signals alone can carry HIGH confidence. Offsets are per build and are only listed where they were observed first-hand; hashes are per-build aliases of build+module+offset. Sources: obs = observed in a real dump, kb = April 2026 knowledge base, ext = external report (1of1 aggregate, CFX forum). official_hashes: CitizenFX's own crash-data.json entries with an owner mapping added; the engine turns a matching hash into a crash.cfx_known.* family.",
+  "thresholds": {
+    "high": 8,
+    "medium": 4
+  },
+  "module_names": {
+    "fivem.exe": "FiveM client",
+    "gtaprocess": "FiveM game process (per-build)",
+    "gta-core-five.dll": "FiveM core game hooks",
+    "gta-streaming-five.dll": "Asset streaming engine",
+    "gta-net-five.dll": "Network sync layer",
+    "citizen-scripting-core.dll": "Script runtime",
+    "citizen-scripting-v8": "JavaScript script runtime",
+    "citizen-devtools.dll": "FiveM dev tools",
+    "adhesive.dll": "FiveM protection layer (authentication handoff)",
+    "legitimacy.dll": "FiveM protection layer",
+    "libcef.dll": "Chromium (NUI / launcher UI)",
+    "d3d11.dll": "DirectX 11 runtime",
+    "dxgi.dll": "DirectX graphics infrastructure",
+    "nvwgf2umx.dll": "NVIDIA GPU driver",
+    "amdxx64.dll": "AMD GPU driver",
+    "kernelbase.dll": "Windows runtime",
+    "vcruntime140.dll": "Visual C++ runtime",
+    "mono-2.0-sgen.dll": "C# script runtime"
+  },
+  "families": [
+    {
+      "id": "pool_full",
+      "family": "crash.pool_full",
+      "title": "Engine pool exhaustion",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "The server streams more content than an engine pool can hold. Reduce or split streamed content; this cannot be fixed on the player's PC.",
+      "cause": {
+        "headline": "Server content overflowed an engine pool",
+        "detail": "The log records a pool-full error before the crash and crashometry names the pool. Observed on the same server across three players (RTX 3080/3060/4060 Ti) with 106\u2013178 minute sessions, which rules out client hardware. Broken-collision ('Physics validation failed') warnings often accompany it."
+      },
+      "fix": {
+        "steps": [
+          "Search the server's streamed content for duplicate archetypes (two resources defining the same model name); remove one.",
+          "Reduce the number of streamed vehicles, MLOs, and props, starting with the largest packs added most recently.",
+          "If you use increase_pool_size in server.cfg, verify the pool name and that the value is within the published ceilings; it cannot fix an <<unknown pool>>.",
+          "Re-test with the same players; if sessions now exceed the previous crash time without the warning, the content change was the fix."
+        ],
+        "docs": "crash/pool-full"
+      },
+      "signals": [
+        {
+          "type": "crashometry",
+          "field": "pool_error",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Pool Full, Size ==",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "<<unknown pool>>",
+          "weight": 2
+        },
+        {
+          "type": "log",
+          "pattern": "Duplicate archetype",
+          "weight": 2,
+          "role": "precursor"
+        },
+        {
+          "type": "log",
+          "pattern": "Physics validation failed",
+          "weight": 1,
+          "role": "context"
+        },
+        {
+          "type": "offset",
+          "module": "gtaprocess",
+          "offsets": {
+            "3095": "64C24F",
+            "3570": "64C24F"
+          },
+          "weight": 4
+        },
+        {
+          "type": "hash",
+          "values": [
+            "fish-mockingbird-two"
+          ],
+          "weight": 4
+        }
+      ],
+      "sources": [
+        "obs:2025-05-04/05/06 b3095 x3 (same server, 3 GPUs)",
+        "obs:2026-08-09 b3570 x3"
+      ],
+      "require_definitive": true
+    },
+    {
+      "id": "pattern_scan_assert",
+      "family": "crash.pattern_scan_assert",
+      "title": "Pattern scan assertion in FiveM core hooks",
+      "severity": "HIGH",
+      "owner": "player",
+      "owner_detail": "FiveM could not find an expected byte pattern in the game executable. This is a game-file or build mismatch on the player's machine, or a fresh game update FiveM hasn't caught up with.",
+      "cause": {
+        "headline": "FiveM's hook installer failed to match the game binary (m_matches.size() == expected)",
+        "detail": "gta-core-five.dll scans the game executable for known byte patterns at startup. When the count of matches differs from what it expects, it asserts. Causes: modified or corrupted game files, a game build FiveM doesn't support yet, or a stale FiveM cache after a game update."
+      },
+      "fix": {
+        "steps": [
+          "Verify the GTA V installation (Steam/Epic/Rockstar: verify game files).",
+          "Update FiveM (let the launcher finish updating; don't launch while it is patching).",
+          "Delete FiveM.app\\data\\cache and FiveM.app\\data\\server-cache, then relaunch.",
+          "If the crash appeared right after a GTA V update and affects many players, wait for a FiveM update; nothing on the player's PC is wrong."
+        ],
+        "docs": "crash/pattern-scan"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Assertion failure: m_matches.size() == expected",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-core-five\\.dll$",
+          "weight": 2
+        },
+        {
+          "type": "offset",
+          "module": "gta-core-five.dll",
+          "offsets": {
+            "3570": "1B840"
+          },
+          "weight": 3
+        },
+        {
+          "type": "exception",
+          "codes": [
+            "0x80000004"
+          ],
+          "weight": 1
+        },
+        {
+          "type": "hash",
+          "values": [
+            "snake-eleven-robin"
+          ],
+          "weight": 4
+        }
+      ],
+      "sources": [
+        "obs:2026-08-09 b3570",
+        "obs:2025-07-25 b3570"
+      ]
+    },
+    {
+      "id": "ros_handshake",
+      "family": "crash.ros_handshake",
+      "title": "Rockstar launcher / ROS handshake failure",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "FiveM could not complete sign-in with the Rockstar Games Launcher. This is a launcher or Rockstar-services problem on the player's side (or Rockstar's), not a server problem and not a cheat detection.",
+      "cause": {
+        "headline": "Rockstar Games Launcher handshake failed (ROSLauncher ExitCode 500/506/183)",
+        "detail": "FiveM hands off to the Rockstar launcher to verify game ownership. When the launcher fails to start, sign in, or respond, the protection layer aborts the session, which surfaces as a deliberate crash in legitimacy.dll or a CEF (browser) crash. The log line naming ROSLauncher is the real cause. A Cloudflare error page logged by ROSLauncher means Rockstar's services were unreachable or blocking the request; the 0xDEED write is FiveM's deliberate stop, not a memory bug."
+      },
+      "fix": {
+        "steps": [
+          "Open the Rockstar Games Launcher on its own and sign in; if it fails, the problem is there, not in FiveM.",
+          "Update the Rockstar Games Launcher and Social Club, then reboot.",
+          "Check Rockstar service status; ExitCode 500-series during an outage will clear on its own.",
+          "If persistent: sign out of the launcher, delete %localappdata%\\FiveM\\FiveM.app\\data\\cache\\ros_launcher_*, sign back in.",
+          "Do not treat this as a mod-menu detection; the ROSLauncher error rules that out."
+        ],
+        "docs": "crash/ros-handshake"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Failure connecting to the Rockstar Games Launcher",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "ROSLauncher",
+          "weight": 3
+        },
+        {
+          "type": "exitcode",
+          "codes": [
+            500,
+            506,
+            183
+          ],
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "handshake",
+          "weight": 1
+        },
+        {
+          "type": "module",
+          "pattern": "^(legitimacy\\.dll|libcef\\.dll)$",
+          "weight": 1
+        },
+        {
+          "type": "address",
+          "values": [
+            "0xDEED",
+            "0x000000000000DEED"
+          ],
+          "weight": 2
+        },
+        {
+          "type": "log",
+          "pattern": "Failed to connect to authentication services",
+          "weight": 3
+        },
+        {
+          "type": "module",
+          "pattern": "^ros-patches-five\\.dll$",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "cf-error",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "Cloudflare",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 legitimacy.dll+7AF632 ExitCode 506",
+        "obs:2026-08-08 batch3",
+        "obs:2023-01-10 ros-patches-five.dll+722D4 0xDEED with Cloudflare error page in ROSLauncher output"
+      ],
+      "suppressed_by": [
+        "ownership_validation",
+        "ros_game_type_403"
+      ]
+    },
+    {
+      "id": "adhesive_auth_handoff",
+      "family": "crash.adhesive_auth_handoff",
+      "title": "Authentication handoff crash in adhesive.dll",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "The protection layer crashed during the sign-in handoff. Usually resolved by restarting FiveM cleanly; occasionally a Rockstar-side outage.",
+      "cause": {
+        "headline": "adhesive.dll faulted during the authentication handoff",
+        "detail": "adhesive.dll is FiveM's protection layer around sign-in and entitlement. A fault here during startup, rather than mid-session, points at the handoff to Rockstar services rather than at anything the server streamed."
+      },
+      "fix": {
+        "steps": [
+          "Close FiveM fully (check Task Manager for FiveM_GTAProcess), then relaunch.",
+          "Make sure the Rockstar Games Launcher is signed in before launching FiveM.",
+          "If it repeats on the same day for many players, check Rockstar service status and wait."
+        ],
+        "docs": "crash/adhesive-handoff"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^adhesive\\.dll$",
+          "weight": 4
+        },
+        {
+          "type": "hash",
+          "values": [
+            "diet-thirteen-minnesota"
+          ],
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "ROS",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 batch2"
+      ]
+    },
+    {
+      "id": "streaming_inflate",
+      "family": "crash.streaming_corrupt_asset",
+      "title": "Corrupt streamed asset (inflate / compcache failure)",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "A server-downloaded asset failed to decompress. The file on the server (or its CDN copy) is corrupt or was packed incorrectly.",
+      "cause": {
+        "headline": "inflate() failed on a server-streamed asset",
+        "detail": "The streaming engine could not decompress an RSC7 resource file. Observed on server-downloaded clothing assets; the same file fails for every player who receives it, which distinguishes it from a local cache corruption."
+      },
+      "fix": {
+        "steps": [
+          "Identify the asset named near the inflate/compcache line in the log.",
+          "Re-export or re-pack that file with a known-good tool and replace it on the server.",
+          "Purge the server's CDN/cache copy so players don't keep receiving the corrupt version.",
+          "Players: clear FiveM.app\\data\\server-cache once after the server fix."
+        ],
+        "docs": "crash/corrupt-asset"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "inflate()",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "corrupt",
+          "weight": 1
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-streaming-five\\.dll$",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 batch2",
+        "obs:2026-08-08 batch3"
+      ]
+    },
+    {
+      "id": "streaming_invalid_asset",
+      "family": "crash.streaming_invalid_asset",
+      "title": "Invalid streamed asset (collision, archetype, or drawable)",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "A streamed model, collision mesh, or archetype definition is malformed. The server needs to fix or remove the asset.",
+      "cause": {
+        "headline": "The streaming engine rejected a malformed asset",
+        "detail": "Log lines such as 'Invalid poly edge' (broken YBN collision), 'Failed to create archetype' (YTYP referencing a missing YDR), or 'Could not load drawable' identify the class of asset. The crash follows when the engine tries to use it. 'This file was likely processed by a bad tool' names a streamed file whose packing FiveM considers unsafe."
+      },
+      "fix": {
+        "steps": [
+          "Find the asset or resource named on the log line closest to the crash.",
+          "Validate it with an asset tool (CodeWalker/OpenIV); rebuild collision or fix the YTYP reference.",
+          "Remove the resource temporarily to confirm the crash stops, then reintroduce the fixed file."
+        ],
+        "docs": "crash/invalid-asset"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "processed by a bad tool",
+          "weight": 4,
+          "role": "definitive"
+        },
+        {
+          "type": "log_count_min",
+          "key": "Physics validation failed",
+          "min": 200,
+          "weight": 2
+        },
+        {
+          "type": "log",
+          "pattern": "WrapStreamingLoad",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "ResourceChecks.cpp",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "Invalid poly edge",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Failed to create archetype",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Could not load drawable",
+          "weight": 4
+        },
+        {
+          "type": "log",
+          "pattern": "Streaming request failed",
+          "weight": 3
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-streaming-five\\.dll$",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "kb:2026-04",
+        "obs:2026 DumpServer stack gta-streaming-five.dll!WrapStreamingLoad (steak-delta-seventeen)",
+        "obs:2022-07-14 b2372 florida-delta-ink (1945 broken-collision warnings + bad-tool warning)"
+      ]
+    },
+    {
+      "id": "cdn_download_timeout",
+      "family": "crash.cdn_download_timeout",
+      "title": "Server content download timed out",
+      "severity": "MEDIUM",
+      "owner": "server_owner",
+      "owner_detail": "Players could not download server content in time. Usually the server's CDN/host bandwidth or a mis-set download URL; occasionally the player's connection.",
+      "cause": {
+        "headline": "Downloading streamed content from the server timed out",
+        "detail": "The client requests resources from the server (or its configured CDN) during join. Timeouts here happen before gameplay and affect many players at once when the host is saturated."
+      },
+      "fix": {
+        "steps": [
+          "Check the server's bandwidth and whether a CDN (fileserver / sv_fileServer) is configured and reachable.",
+          "Reduce total streamed content size; large first-join downloads are the usual trigger.",
+          "If only one player: have them test their connection and retry off VPN."
+        ],
+        "docs": "crash/download-timeout"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Failed to fetch",
+          "weight": 2
+        },
+        {
+          "type": "log",
+          "pattern": "download",
+          "weight": 1
+        },
+        {
+          "type": "log",
+          "pattern": "timed out",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "Timed out",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "CURLE_",
+          "weight": 3
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 batch2"
+      ]
+    },
+    {
+      "id": "net_timeout",
+      "family": "crash.net_timeout",
+      "title": "Network timeout to server",
+      "severity": "MEDIUM",
+      "owner": "server_owner",
+      "owner_detail": "The client stopped receiving from the server. If several players drop together it's the server or host; if one player, their connection.",
+      "cause": {
+        "headline": "Client timed out waiting for the server",
+        "detail": "Sync packets stopped arriving for longer than the timeout. Correlate with other players' drops at the same minute to tell host trouble from one bad connection."
+      },
+      "fix": {
+        "steps": [
+          "Check whether other players dropped in the same minute (Sentinel's timeline, or txAdmin player log).",
+          "If many did: look at server hitches and host network at that time.",
+          "If one did: player checks their network, VPN, and any packet-shaping software."
+        ],
+        "docs": "crash/net-timeout"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Timed out after",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Connection timed out",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-net-five\\.dll$",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 batch2"
+      ]
+    },
+    {
+      "id": "memory_alloc",
+      "family": "crash.memory_alloc",
+      "title": "Memory allocation failure",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "The client ran out of memory. When it happens to players with adequate RAM/VRAM, the server's streamed content is too large; when it's one low-spec player, it's their hardware.",
+      "cause": {
+        "headline": "Allocation failed (std::bad_alloc / Memory allocation failed)",
+        "detail": "The game could not get memory for an asset or render resource. In FiveM this is usually VRAM pressure from streamed textures and vehicles rather than system RAM, and it lands in d3d11.dll or kernelbase.dll with std::bad_alloc."
+      },
+      "fix": {
+        "steps": [
+          "Ask how many players hit it and their GPU VRAM; if 8 GB+ cards crash, the server content is too heavy.",
+          "Run the Assets scan (or a texture tool) to find oversized YTDs and duplicate vehicle packs.",
+          "Player-side: lower texture quality, close overlays, update GPU driver."
+        ],
+        "docs": "crash/memory"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "std::bad_alloc",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Memory allocation failed",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "out of memory",
+          "weight": 4
+        },
+        {
+          "type": "module",
+          "pattern": "^(d3d11\\.dll|kernelbase\\.dll)$",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-08-08 batch3",
+        "kb:2026-04"
+      ]
+    },
+    {
+      "id": "gpu_driver",
+      "family": "crash.gpu_driver",
+      "title": "GPU driver fault",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "The crash is inside the graphics driver. Driver, overclock/undervolt, or overlay on the player's machine.",
+      "cause": {
+        "headline": "Fault inside the GPU driver (nvwgf2umx.dll / amdxx64.dll)",
+        "detail": "FiveM is the victim here: the driver died mid-frame. Often accompanied by DXGI_ERROR_DEVICE_REMOVED. Unstable CPU/GPU undervolts and immature drivers for new cards are the common triggers."
+      },
+      "fix": {
+        "steps": [
+          "Clean-reinstall the GPU driver (DDU in safe mode, then latest stable).",
+          "Reset any GPU/CPU undervolt or overclock to defaults while testing.",
+          "Disable overlays (Discord, GeForce/Adrenalin, Steam) and MPO if on AMD.",
+          "If the same GPU model crashes across servers, it isn't the server."
+        ],
+        "docs": "crash/gpu-driver"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^(nvwgf2umx\\.dll|amdxx64\\.dll|dxgi\\.dll|rage-graphics-five\\.dll)$",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "DXGI_ERROR_DEVICE_REMOVED",
+          "weight": 4
+        },
+        {
+          "type": "log",
+          "pattern": "DEVICE_HUNG",
+          "weight": 3
+        }
+      ],
+      "sources": [
+        "obs:2026-05-31 amdxx64.dll+D0C62",
+        "ext:1of1 aggregate"
+      ]
+    },
+    {
+      "id": "init_core_renderer",
+      "family": "crash.init_core_renderer",
+      "title": "Renderer failed during INIT_CORE",
+      "severity": "HIGH",
+      "owner": "player",
+      "owner_detail": "The game crashed while initialising the renderer, before any server content loaded. Driver or display configuration on the player's machine.",
+      "cause": {
+        "headline": "CRenderer access violation during INIT_CORE",
+        "detail": "INIT_CORE runs before the client joins a server. A c0000005 in the renderer here cannot be caused by server content; it's the display driver, a broken graphics setting, or an overlay hooking too early."
+      },
+      "fix": {
+        "steps": [
+          "Delete FiveM.app\\data\\cache and CitizenFX.ini graphics section, relaunch.",
+          "Update or clean-reinstall the GPU driver.",
+          "Disable overlays and any DXVK/ReShade/ENB in the game folder."
+        ],
+        "docs": "crash/init-core"
+      },
+      "signals": [
+        {
+          "type": "log_last",
+          "pattern": "Invoking CRenderer INIT_CORE",
+          "weight": 6,
+          "role": "definitive",
+          "within": 3
+        },
+        {
+          "type": "session_max_min",
+          "value": 3,
+          "weight": 2
+        },
+        {
+          "type": "exception",
+          "codes": [
+            "0xC0000005"
+          ],
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-08-08 batch3",
+        "obs:2025-06-13 b1604 +1294E08 read 0x0 at 17 s on RTX 5070 Ti / Win11 26100 (solar-music-december)"
+      ]
+    },
+    {
+      "id": "build_switch_failed",
+      "family": "crash.build_switch_failed",
+      "title": "Game build switch failed",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "FiveM could not switch to the game build the server enforces. Usually a stale or partial build download on the player's side.",
+      "cause": {
+        "headline": "Switching to the server's enforced game build failed",
+        "detail": "Servers set sv_enforceGameBuild; the client downloads and swaps to that build on join. A failed or interrupted switch leaves the client with a mismatched executable and it crashes at load."
+      },
+      "fix": {
+        "steps": [
+          "Let FiveM finish the build download without alt-tabbing or closing.",
+          "Delete FiveM.app\\data\\game-storage\\ros_* and the cache, relaunch, rejoin.",
+          "Server owners: confirm the enforced build is one the current FiveM release supports."
+        ],
+        "docs": "crash/build-switch"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "failed LC",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "game build",
+          "weight": 2
+        },
+        {
+          "type": "log",
+          "pattern": "build switch",
+          "weight": 3
+        }
+      ],
+      "sources": [
+        "obs:2026-08-08 batch5"
+      ]
+    },
+    {
+      "id": "launcher_entitlement",
+      "family": "crash.launcher_entitlement",
+      "title": "Launcher or entitlement error",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "FiveM could not confirm game ownership or the launcher failed. Player-side account or launcher state; occasionally Rockstar services.",
+      "cause": {
+        "headline": "Entitlement / launcher check did not complete",
+        "detail": "Ownership verification runs through the Rockstar launcher and Social Club. Sign-in problems, a second account, or a launcher update in progress all fail it."
+      },
+      "fix": {
+        "steps": [
+          "Sign into the Rockstar Games Launcher directly and confirm GTA V shows as owned.",
+          "Make sure the same account is signed in for Steam/Epic and Rockstar.",
+          "Retry after the launcher finishes any update."
+        ],
+        "docs": "crash/entitlement"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "entitlement",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "launcher",
+          "weight": 1
+        },
+        {
+          "type": "module",
+          "pattern": "^libcef\\.dll$",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-08-07 batch2"
+      ]
+    },
+    {
+      "id": "protection_layer_generic",
+      "family": "crash.protection_layer",
+      "title": "Protection layer stop (no launcher error present)",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "FiveM's protection layer stopped the session and the log gives no launcher error to explain it. Overlays, injectors, modified game files, or a mod menu can all trigger this; so can a corrupted install.",
+      "cause": {
+        "headline": "legitimacy.dll ended the session deliberately (marker write)",
+        "detail": "A write to a marker address inside legitimacy.dll is an intentional stop, not a null-pointer bug. Without a ROSLauncher or entitlement line in the log, the reason is on the player's machine. This finding is NOT evidence of cheating on its own; treat it as 'check what's hooked into the game'."
+      },
+      "fix": {
+        "steps": [
+          "Close every overlay and injector (Discord, MSI Afterburner/RTSS, ReShade, trainers), then relaunch.",
+          "Verify game files and make sure no .asi or modified .dll sits in the GTA V folder.",
+          "Clear FiveM.app\\data\\cache. If it persists on a clean install, submit the dump as an unknown case."
+        ],
+        "docs": "crash/protection-layer"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^legitimacy\\.dll$",
+          "weight": 3
+        },
+        {
+          "type": "address",
+          "values": [
+            "0xDEED",
+            "0x000000000000DEED"
+          ],
+          "weight": 2
+        }
+      ],
+      "suppressed_by": [
+        "ros_handshake",
+        "launcher_entitlement",
+        "ownership_validation",
+        "ros_game_type_403",
+        "redm_vulkan_device_memory",
+        "redm_elevation_helper_signature"
+      ],
+      "sources": [
+        "obs:2026-08-07",
+        "ext:1of1 aggregate"
+      ]
+    },
+    {
+      "id": "script_runtime",
+      "family": "crash.script_runtime",
+      "title": "Script runtime crash",
+      "severity": "HIGH",
+      "owner": "script_developer",
+      "owner_detail": "A script passed something invalid to a native or the script runtime faulted. The resource named nearest the crash in the log is where to look.",
+      "cause": {
+        "headline": "Fault inside the script runtime (citizen-scripting)",
+        "detail": "Lua/JS scripts run inside citizen-scripting-core / -v8. A crash here, rather than a script error, usually means a native was invoked with an invalid entity or a runtime object was used after being freed."
+      },
+      "fix": {
+        "steps": [
+          "Read the last SCRIPT ERROR / resource name in the log before the crash; that's the suspect.",
+          "Check that entity handles are validated (DoesEntityExist) before natives like GetPedBoneCoords.",
+          "Reproduce with the suspect resource stopped to confirm."
+        ],
+        "docs": "crash/script-runtime"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^citizen-scripting-(core|v8|lua)",
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "InvokeNative failed",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "SCRIPT ERROR",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "kb:2026-04",
+        "ext:1of1 aggregate"
+      ]
+    },
+    {
+      "id": "eup_ped_spawn",
+      "family": "crash.ped_spawn_components",
+      "title": "Crash spawning a ped with custom components (EUP)",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "Players crash when their character spawns with server-provided clothing/ped components. The ped or clothing pack on the server is the suspect, usually after a game-build change.",
+      "max_confidence": "MEDIUM",
+      "cause": {
+        "headline": "Ped/component load crashed in the game executable during spawn",
+        "detail": "Reported when spawning custom EUP peds after moving game builds. GTA V caps ped component variations at 160 per slot; packs assembled for one build can exceed limits or reference missing drawables on another. Confidence is capped until more dumps with logs confirm the mechanism."
+      },
+      "fix": {
+        "steps": [
+          "Confirm it happens only with the custom ped/EUP pack enabled; disable it and spawn again.",
+          "Check each component slot in the pack stays under 160 variations and that every referenced .ydd/.ytd exists for the current build.",
+          "Rebuild the pack's .ymt for the enforced game build; don't reuse one generated for a different build.",
+          "Submit the crash zip (with the log) so the family can be confirmed."
+        ],
+        "docs": "crash/ped-components"
+      },
+      "signals": [
+        {
+          "type": "hash",
+          "values": [
+            "virginia-october-hydrogen"
+          ],
+          "weight": 4
+        },
+        {
+          "type": "offset",
+          "module": "gtaprocess",
+          "offsets": {
+            "3258": "7252AB"
+          },
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "CPed",
+          "weight": 1
+        },
+        {
+          "type": "log",
+          "pattern": "component",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "user-report:2026-08 GTA5_b3258.exe+7252AB after 2612\u21923095/3258 build move, EUP peds",
+        "ext:1of1 aggregate #2 (9 sightings)"
+      ]
+    },
+    {
+      "id": "server_js_fatal",
+      "family": "crash.server_js_fatal",
+      "title": "FXServer crashed inside the JavaScript runtime",
+      "severity": "CRITICAL",
+      "owner": "script_developer",
+      "owner_detail": "This is a SERVER crash, not a client crash: the V8 runtime hit a fatal error, usually a JavaScript resource exhausting memory or hitting an unreachable state. Every player was dropped.",
+      "cause": {
+        "headline": "V8 fatal error in a server-side JavaScript resource",
+        "detail": "The dump comes from FXServer (Windows Server OS, v8-*.dll faulting, no game process). V8 raises a breakpoint-style fatal on heap-limit or internal invariants. The server console around the time will name the resource ('FATAL ERROR: Reached heap limit' or a stack trace)."
+      },
+      "fix": {
+        "steps": [
+          "Read the server console immediately before the restart for a FATAL ERROR or stack trace naming a resource.",
+          "If it's a heap limit, find the JS resource growing memory (unbounded caches, arrays that never clear) or raise the V8 heap only as a stopgap.",
+          "Run with the suspect resource stopped and watch for recurrence."
+        ],
+        "docs": "crash/server-js"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^v8-.*\\.dll$",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "exception",
+          "codes": [
+            "0x80000003"
+          ],
+          "weight": 1
+        },
+        {
+          "type": "os",
+          "pattern": "Build (20348|17763|14393|26100)",
+          "weight": 1
+        },
+        {
+          "type": "log",
+          "pattern": "Reached heap limit",
+          "weight": 4
+        }
+      ],
+      "sources": [
+        "obs:2026-02-08 v8-9.3.345.16.dll+55F5E5 on Windows Server 2022"
+      ]
+    },
+    {
+      "id": "server_mono_sigsegv",
+      "family": "crash.server_mono_fatal",
+      "title": "FXServer crashed inside the C# (mono) runtime",
+      "severity": "CRITICAL",
+      "owner": "script_developer",
+      "owner_detail": "A SERVER crash: native code called from a C# resource faulted. txAdmin restarts the server; players are dropped. The C# resource active at the time is the suspect.",
+      "cause": {
+        "headline": "SIGSEGV in native code under the mono runtime",
+        "detail": "The console shows 'Native Crash Reporting: Got a SIGSEGV while executing native code' followed by a managed stack trace. It is a fault in a native library used by a C# resource, or in the mono runtime itself, not in Lua/JS resources."
+      },
+      "fix": {
+        "steps": [
+          "Read the 'Managed Stacktrace' block right after the SIGSEGV line; the top frames name the C# resource and method.",
+          "Update or remove that resource; if it wraps a native DLL, check the DLL matches the server artifact version.",
+          "Check for a hitch warning cluster just before it (network/sync thread hitches often precede the fault)."
+        ],
+        "docs": "crash/server-mono"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Got a SIGSEGV while executing native code",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Native Crash Reporting",
+          "weight": 3
+        },
+        {
+          "type": "log",
+          "pattern": "Managed Stacktrace",
+          "weight": 2
+        },
+        {
+          "type": "module",
+          "pattern": "^mono-2\\.0-sgen\\.dll$",
+          "weight": 4
+        }
+      ],
+      "sources": [
+        "obs:2026-03-29 txAdmin console (server restart after SIGSEGV)"
+      ]
+    },
+    {
+      "id": "early_exit_trap",
+      "family": "crash.early_exit_trap",
+      "title": "Early-exit trap",
+      "severity": "HIGH",
+      "owner": "player",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "FiveM ended the process on purpose after a fault or a hang it could not recover from. The trap is the messenger; the cause is what was happening right before it, and in most reports that is something on the player's machine hooking or blocking the game (overlay, antivirus/EDR, GPU driver), occasionally server content that stalls loading.",
+      "cause": {
+        "headline": "FiveM tripped its early-exit trap (deliberate termination at +1000/+101C/+1028)",
+        "detail": "An 'execute' access violation at a tiny offset inside the game process (+0x1000, +0x101C or +0x1028; RedM uses +0x1000) is FiveM jumping to a trap address, not a real bad jump. At exactly ~30 s after launch it is the startup watchdog (initialisation never completed); later in a session it is a caught fatal condition. Look at the last log lines before 'early-exit trap' for the actual trigger."
+      },
+      "fix": {
+        "steps": [
+          "Read the lines just before 'early-exit trap' in CitizenFX.log; if there are none, it's the startup watchdog.",
+          "Disable every overlay and injector (Discord, GeForce/Adrenalin, Steam, RTSS, ReShade) and add FiveM.app to antivirus exclusions.",
+          "Clean-reinstall the GPU driver; reset any undervolt/overclock.",
+          "Delete FiveM.app\\data\\cache and data\\server-cache, verify GTA V files, relaunch.",
+          "If the log shows 'can't register compcache \u2026 no streaming module' spam, tell the server owner: junk files in a stream/ folder are stalling load."
+        ],
+        "docs": "crash/early-exit-trap"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "early-exit trap",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "trap_offset",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "log_count_min",
+          "key": "no streaming module",
+          "min": 5,
+          "weight": 1,
+          "role": "context"
+        }
+      ],
+      "sources": [
+        "obs:2024-05-26 b2944 +1028 at 30 s (blue-pizza-jersey)",
+        "obs:2026-05-23 +1028 at 7 min",
+        "obs:2024-05-28 b2944 +101C (indigo-monkey-quiet)",
+        "obs:2026-05-24 b3788 log-only, 174 s, after compcache junk-file spam",
+        "forum: 'Early-exit traps 101C/1028', 'indigo-monkey-quiet / fivem.exe+101C'",
+        "obs:2026-06-06 RedM RedM_GTAProcess.exe+1000 at 1 min (sierra-mike-double), first real-browser run"
+      ]
+    },
+    {
+      "id": "streaming_content_pressure",
+      "family": "crash.streaming_content_pressure",
+      "title": "Crash under heavy streamed-content problems",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "The exact mechanism isn't pinned down, but the log is full of streamed-content faults (duplicate archetypes, broken collision, DLC files that fail to load). Fix those and re-test before chasing anything else.",
+      "cause": {
+        "headline": "Game-engine crash while the log is full of streamed-content faults",
+        "detail": "Dozens to hundreds of 'Duplicate Archetype', 'Physics validation failed' or 'Failed to load DLC' lines precede the crash. These are server content problems; the crash location varies with build, which is why this family is a content diagnosis rather than a single signature."
+      },
+      "fix": {
+        "steps": [
+          "Run an archetype duplicate check across all .ytyp files and remove the duplicates.",
+          "Fix or remove the .ybn/.ydr files named in 'Physics validation failed' lines.",
+          "Fix the handling/DLC meta files named in 'Failed to load DLC' lines.",
+          "Re-test; if crashes persist with a clean log, submit the dump as an unknown case."
+        ],
+        "docs": "crash/content-pressure"
+      },
+      "signals": [
+        {
+          "type": "log_count_min",
+          "key": "Duplicate archetype",
+          "min": 10,
+          "weight": 3
+        },
+        {
+          "type": "log_count_min",
+          "key": "Physics validation failed",
+          "min": 50,
+          "weight": 3
+        },
+        {
+          "type": "log_count_min",
+          "key": "Failed to load DLC",
+          "min": 1,
+          "weight": 2
+        },
+        {
+          "type": "module",
+          "pattern": "^(gtaprocess|gta-streaming-five\\.dll)$",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2025-05-10 b3258 violet-network-nitrogen (280 collision + 11 dup + DLC)",
+        "obs:2026-01-09 b3258 three-magnesium-muppet (183 dup + 3 DLC, divide-by-zero)"
+      ]
+    },
+    {
+      "id": "streaming_sub_16f",
+      "family": "crash.streaming_load_16f",
+      "title": "Streaming load crash (sub_1413xxxxx + 0x16f)",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "A known streaming-code crash location that follows the game across builds (same +0x16f inside the streaming function). Reported on CitizenFX GitHub; content on the server is the usual trigger.",
+      "cause": {
+        "headline": "Crash inside the streaming loader at +0x16f (GitHub #2722 / #2602 family)",
+        "detail": "The symbolicated signature ends in (0x16f) or (0xc8) inside a sub_1413\u2026 streaming function on several builds (b3095 sub_141311FB0, b3258 sub_141322F74). CitizenFX issues track it as a streaming crash tied to bad or conflicting streamed assets."
+      },
+      "fix": {
+        "steps": [
+          "Treat as content: clear duplicate archetypes and broken collision first (see the log counts).",
+          "Bisect recently added MLOs/vehicle packs.",
+          "Reference: citizenfx/fivem issues #2722 and #2602 for the current state of the upstream fix."
+        ],
+        "docs": "crash/streaming-16f"
+      },
+      "signals": [
+        {
+          "type": "symbol_offset",
+          "module": "gtaprocess",
+          "values": [
+            "16F",
+            "C8"
+          ],
+          "weight": 4
+        },
+        {
+          "type": "hash",
+          "values": [
+            "violet-network-nitrogen"
+          ],
+          "weight": 3
+        },
+        {
+          "type": "log_count_min",
+          "key": "Physics validation failed",
+          "min": 50,
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2025-05-10 b3258 sub_141322F74 (0x16f)",
+        "gh#2722 GTA5_b3095.exe!sub_141311FB0 (0x16f)",
+        "gh#2602 Streaming: GTA5_b3095.exe!sub_14131068C (0xc8)"
+      ]
+    },
+    {
+      "id": "netgameevent_pool",
+      "family": "crash.netgameevent_pool",
+      "title": "rage::netGameEvent pool exhausted",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "owner_detail": "The network game-event pool ran out. Too many net events in flight for the pool size: heavy OneSync population, event-spamming scripts, or a pool that needs raising.",
+      "cause": {
+        "headline": "Ran out of rage::netGameEvent pool space",
+        "detail": "Logged explicitly right before the crash. Seen on RedM b1355 with OneSync; the pool is engine-side, so the fix is fewer events or a larger pool."
+      },
+      "fix": {
+        "steps": [
+          "Find scripts firing network events in tight loops (Sentinel's net.rate window, or profiler).",
+          "Reduce OneSync population/ambient density if it's a RedM wildlife server.",
+          "If supported for the pool on your build, raise it modestly with increase_pool_size and re-test."
+        ],
+        "docs": "crash/netgameevent-pool"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Ran out of rage::netGameEvent pool space",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-net-(five|rdr3)\\.dll$",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2021-09-01 RedM b1355 gta-net-rdr3.dll+42030 (montana-salami-tennessee)"
+      ]
+    },
+    {
+      "id": "rage_error",
+      "family": "crash.rage_error",
+      "title": "RAGE engine error",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "The engine raised a RAGE error code rather than faulting. These are almost always content or script-driven (a bad asset or an invalid native call), so the server side is the place to start.",
+      "cause": {
+        "headline": "RAGE error raised by the engine",
+        "detail": "'RAGE error: 0x\u2026:NNN' is the engine's own assertion, not a memory fault. The code is engine-internal; the log lines before it (script errors, NUI callback errors) are the lead."
+      },
+      "fix": {
+        "steps": [
+          "Read the script/NUI errors immediately before the RAGE error line; the resource named there is the suspect.",
+          "Stop that resource and reproduce.",
+          "Submit the dump so the RAGE code can be mapped."
+        ],
+        "docs": "crash/rage-error"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "RAGE error:",
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^gta-core-(five|rdr3)\\.dll$",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2021-09-04 RedM b1355 gta-core-rdr3.dll+20AB4 RAGE error 0x2914FEF:439 after NUI callback errors"
+      ]
+    },
+    {
+      "id": "remote_exploit",
+      "family": "crash.remote_exploit",
+      "title": "Remote crash by a malicious client (known exploit signature)",
+      "severity": "CRITICAL",
+      "owner": "platform",
+      "owner_detail": "A cheater on the server triggered a crash in other players' clients. CitizenFX patches these in artifacts; the server owner must update and should consider whether a specific player was present at every crash.",
+      "cause": {
+        "headline": "Known remote-crash exploit signature (b3258 +14D237 / +1244BB7)",
+        "detail": "Tracked upstream as citizenfx/fivem #3869 (oxygen-north-fish), #4135 (quebec-october-november), #4117 and #4139 (unbounded array index in a network-driven update path). Multiple players crashing near one another at the same moment is the tell."
+      },
+      "fix": {
+        "steps": [
+          "Update server artifacts to the latest recommended build; the fix ships there.",
+          "Check whether the same player was online at every crash cluster (Sentinel drop-clustering / txAdmin).",
+          "Report to CitizenFX with the dump if it persists on current artifacts."
+        ],
+        "docs": "crash/remote-exploit"
+      },
+      "signals": [
+        {
+          "type": "offset",
+          "module": "gtaprocess",
+          "offsets": {
+            "3258": "14D237"
+          },
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "hash",
+          "values": [
+            "oxygen-north-fish",
+            "quebec-october-november"
+          ],
+          "weight": 7,
+          "role": "definitive"
+        }
+      ],
+      "sources": [
+        "gh#3869",
+        "gh#4135",
+        "gh#4117",
+        "gh#4139",
+        "ext:1of1 aggregate (oxygen-north-fish 2)"
+      ]
+    },
+    {
+      "id": "sub_1929",
+      "family": "crash.known_sub_1929",
+      "title": "Known crash signature: sub_140\u2026+0x1929 (GitHub #3069)",
+      "severity": "HIGH",
+      "owner": "script_developer",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "Tracked upstream (#3069) and, in at least one confirmed case, caused by a script calling RequestModel inside a populationPedCreating handler (pre-loading the models fixed it). Check the scripts that hook populationPedCreating first; then the CitizenFX issue.",
+      "cause": {
+        "headline": "Crash at a signature tracked upstream as citizenfx/fivem #3069 (zulu-helium-queen family)",
+        "detail": "Reported as 'Crashes since recent update' with 38 comments. The function-relative offset 0x1929 follows the game across builds, so different legacy hashes (zulu-helium-queen on b3095, pip-edward-vermont on b3258) are the same crash."
+      },
+      "fix": {
+        "steps": [
+          "Search server scripts for a populationPedCreating handler that calls RequestModel synchronously; pre-load the models outside the handler instead.",
+          "Read citizenfx/fivem #3069 for the current status and any workaround.",
+          "Update client and server artifacts.",
+          "Clean up the content faults in this log (duplicate archetypes, broken collision) and re-test."
+        ],
+        "docs": "crash/gh-3069"
+      },
+      "signals": [
+        {
+          "type": "symbol_offset",
+          "module": "gtaprocess",
+          "values": [
+            "1929"
+          ],
+          "weight": 6,
+          "role": "definitive"
+        },
+        {
+          "type": "hash",
+          "values": [
+            "zulu-helium-queen",
+            "pip-edward-vermont"
+          ],
+          "weight": 4
+        }
+      ],
+      "sources": [
+        "gh#3069 b3095 sub_14039F848 (0x1929)",
+        "obs:2025-01-28 b3258 sub_1403A1D08 (0x1929) pip-edward-vermont",
+        "forum 2026: pip-edward-vermont isolated to a phone resource's populationPedCreating + RequestModel; fixed by pre-loading"
+      ]
+    },
+    {
+      "id": "sub_d5",
+      "family": "crash.known_sub_d5",
+      "title": "Known crash signature: sub_1405\u2026+0xd5",
+      "severity": "HIGH",
+      "owner": "server_owner",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "A crash location seen at the same function-relative offset on b2612 and b3258, both times on servers with heavy streamed-content faults. Treat as content until upstream says otherwise.",
+      "cause": {
+        "headline": "Crash at sub_1405\u2026+0xd5, seen across builds alongside content faults",
+        "detail": "b2612 GTA5.exe!sub_14052F438 (0xd5) on the forum/GitHub (#1541, closed not-planned) and b3258 sub_1405406D4 (0xd5) observed with 164 broken-collision warnings and junk files in stream/."
+      },
+      "fix": {
+        "steps": [
+          "Fix the assets named in 'Physics validation failed' lines and remove non-streamable files from stream/ folders.",
+          "Re-test; submit the dump if it recurs with a clean log."
+        ],
+        "docs": "crash/sub-d5"
+      },
+      "signals": [
+        {
+          "type": "symbol_offset",
+          "module": "gtaprocess",
+          "values": [
+            "D5"
+          ],
+          "weight": 5,
+          "role": "definitive"
+        },
+        {
+          "type": "hash",
+          "values": [
+            "one-foxtrot-salami"
+          ],
+          "weight": 3
+        },
+        {
+          "type": "log_count_min",
+          "key": "Physics validation failed",
+          "min": 50,
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "gh#1541 b2612 sub_14052F438 (0xd5)",
+        "obs:2024-08-22 b3258 sub_1405406D4 (0xd5) one-foxtrot-salami"
+      ]
+    },
+    {
+      "id": "redm_vulkan_device_memory",
+      "family": "crash.redm_vulkan_device_memory",
+      "title": "RedM: Vulkan allocation failed at renderer start",
+      "severity": "HIGH",
+      "owner": "player",
+      "owner_detail": "RedM's Vulkan renderer could not allocate GPU memory while starting and stopped itself. Reported since mid-2025 on Windows 10 and 11, on everything from an integrated Radeon to an RTX 4070 Ti, so it isn't simply 'not enough VRAM'. The most consistent thread through the reports is hybrid graphics: machines with an integrated GPU next to the discrete one. Forcing the discrete GPU, or switching RedM to DirectX 12, resolves most cases.",
+      "cause": {
+        "headline": "Failed to allocate memory for Vulkan during renderer start (glue.dll deliberate stop)",
+        "detail": "The log ends with the Vulkan allocation error and the dump shows glue.dll writing to 0xDEED, RedM's deliberate stop. The VkResult printed after it is unreliable: users see 4294967283 (which is -13, VK_ERROR_UNKNOWN), VK_ERROR_OUT_OF_DEVICE_MEMORY, or garbage bytes, so only the message prefix is trusted. Six dumps in mid-2026 (RedM b1491, 0\u20132 minutes after launch); the 'EADDRINUSE' ROSService lines above it are normal noise. Working hypothesis, not proven: Vulkan device selection lands on the integrated adapter on hybrid systems, whose few hundred MB of device memory fail the first large allocation. Tells that point at adapter selection rather than corruption: the base game runs fine outside RedM, the crash is intermittent across launches, and an integrated GPU is enabled alongside the discrete one (often to drive a second monitor). Reinstalls, SFC/DISM, page-file changes and driver swaps have not resolved it in any report."
+      },
+      "fix": {
+        "steps": [
+          "Force the discrete GPU for RedM: Windows Settings \u2192 System \u2192 Display \u2192 Graphics \u2192 add RedM.exe (and RedM_GTAProcess.exe from RedM.app\\data\\cache\\subprocess) \u2192 High performance. On a laptop, also try the NVIDIA/AMD control panel's per-app GPU setting.",
+          "Switch the graphics API to DirectX 12: in Documents\\Rockstar Games\\Red Dead Redemption 2\\Settings\\system.xml change <API>kSettingAPI_Vulkan</API> to <API>kSettingAPI_DX12</API> and relaunch RedM (do this by file, since the game can't reach its own settings menu when it crashes at start).",
+          "If both fail: disable the integrated GPU in Device Manager as a test, clean-reinstall the discrete GPU driver, and close overlays.",
+          "If it still fails on DX12 with the discrete GPU forced, submit the zip: it's then a different problem wearing this message."
+        ],
+        "docs": "crash/redm-vulkan-memory"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Failed to allocate memory for Vulkan",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "VkResult",
+          "weight": 1
+        },
+        {
+          "type": "module",
+          "pattern": "^glue\\.dll$",
+          "weight": 2
+        },
+        {
+          "type": "address",
+          "values": [
+            "0xDEED"
+          ],
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-06-18 glue.dll+93762 RTX 4070",
+        "obs:2026-07-09 glue.dll+93842 RX 580",
+        "obs:2026-07-24 glue.dll+93912 AMD iGPU",
+        "obs:2026-07-31 glue.dll+93912 RTX 4070 Ti",
+        "obs:2026-08-08 x2 glue.dll+937C2 RTX 2060 SUPER",
+        "forum 2025-07 'RedM not running' (Ryzen, Win11)",
+        "forum 2025-12 laptop 16GB, VkResult 4294967283",
+        "forum 2026-02 'use direct connection to the dedicated graphics'",
+        "steam 2026-01 system.xml DX12 workaround (mixed results)",
+        "forum 2026-07-31 i5-13500 (UHD 770 enabled for multi-monitor) + RTX 4070 Ti, Win11 25H2; exhaustive investigation excluding GPU selection and DX12"
+      ]
+    },
+    {
+      "id": "ownership_validation",
+      "family": "crash.ownership_validation",
+      "title": "Could not validate game ownership",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "The Rockstar side accepted the account but FiveM/RedM could not complete its own ownership check. Most often: launched as administrator, GTA V Enhanced installed where FiveM needs Legacy, or (mid-2026) the rotating machine-hash bug that CitizenFX is tracking.",
+      "cause": {
+        "headline": "Ownership validation failed after sign-in (legitimacy.dll deliberate stop)",
+        "detail": "The log says 'Could not validate game ownership!' and the dump is legitimacy.dll writing to 0xDEED. Launch-time only; no server is involved. If entitlements succeed in the log and the failure repeats on every launch with a different machine hash each time, it's the rotating-machine-hash problem reported July\u2013August 2026 (Legacy only; Enhanced unaffected), which no local fix resolves."
+      },
+      "fix": {
+        "steps": [
+          "Launch FiveM/RedM as a regular user, not as administrator (the message says so, and it's the most common cause).",
+          "FiveM: make sure the installed game is GTA V Legacy, not Enhanced, and that the Rockstar launcher is signed into the account that owns it.",
+          "Sign out and back into the Rockstar Games Launcher; retry.",
+          "If every launch fails and the 'machine hash' line in the log changes each time, follow the CitizenFX forum thread for the rotating-machine-hash issue; it isn't fixable on your side."
+        ],
+        "docs": "crash/ownership"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Could not validate game ownership",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^legitimacy\\.dll$",
+          "weight": 2
+        },
+        {
+          "type": "address",
+          "values": [
+            "0xDEED"
+          ],
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "obs:2026-07-29 legitimacy.dll+6BB9C8 (carolina-network-tennis)",
+        "forum 2026-07/08 rotating machine-hash threads",
+        "forum 2026-08 'Could not validate game ownership after successful entitlement'"
+      ]
+    },
+    {
+      "id": "ros_game_type_403",
+      "family": "crash.ros_game_type_403",
+      "title": "Rockstar refused this game type (403)",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "Rockstar's entitlement service answered 403 'Not allowed for this game type'. The signed-in account doesn't own the edition RedM/FiveM needs: for RedM that's the full Red Dead Redemption 2 (Red Dead Online standalone is not supported); for FiveM, GTA V Legacy on a supported store.",
+      "cause": {
+        "headline": "Obtained error from CPR: 403 - Not allowed for this game type",
+        "detail": "The launcher signed in fine ('MTL says it's signed in') and then the ownership request was rejected by game type. This is an account/edition problem, not a crash in the game."
+      },
+      "fix": {
+        "steps": [
+          "Check which edition the Rockstar account owns: RedM requires Red Dead Redemption 2 (story), not Red Dead Online standalone.",
+          "Make sure the Rockstar launcher is signed into the account that owns it, not a family member's.",
+          "If bought on Steam/Epic, open that store's copy once so the Rockstar launcher links the entitlement, then retry."
+        ],
+        "docs": "crash/game-type-403"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Not allowed for this game type",
+          "weight": 8,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Obtained error from CPR",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2026-08-03 RedM launcher log (Rockstar store)"
+      ]
+    },
+    {
+      "id": "redm_elevation_helper_signature",
+      "family": "crash.elevation_helper_signature",
+      "title": "Elevation helper signature could not be verified",
+      "severity": "MEDIUM",
+      "owner": "platform",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "The launcher needed to elevate and refused its own helper because Windows could not verify the helper's signature. The bundled Rockstar launcher components carry a certificate that expired in 2023 with no timestamp; whether that is the trigger on a given machine depends on Windows' certificate handling, which is CitizenFX's to fix, but a few local checks are worth doing.",
+      "cause": {
+        "headline": "Failed to verify the signature of the elevation helper",
+        "detail": "Logged immediately after 'Launcher requires elevation - using elevated helper'. Nothing was played; the process stopped at the launcher. Observed on RedM (Steam) in August 2026; sfc/DISM clean, system clock correct, RGL-ElevationHelper.exe itself reports Valid."
+      },
+      "fix": {
+        "steps": [
+          "Check why elevation was needed at all: install RedM/FiveM in a normal user folder (not Program Files), and don't run it as administrator.",
+          "Make sure Windows can update root certificates (no policy disabling automatic root updates) and the clock is right.",
+          "Temporarily disable third-party antivirus/EDR that hooks signature checks, retry.",
+          "If it persists, report on the CitizenFX forum with this log; the bundled launcher's expired, untimestamped certificate is the lead."
+        ],
+        "docs": "crash/elevation-helper"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Failed to verify the signature of the elevation helper",
+          "weight": 8,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Launcher requires elevation",
+          "weight": 2
+        }
+      ],
+      "sources": [
+        "obs:2026-08-19 RedM (Steam) launcher log; reporter's certificate analysis"
+      ]
+    },
+    {
+      "id": "redm_reconnect_reload",
+      "family": "crash.redm_reconnect_reload",
+      "title": "RedM: crash on same-process reconnect (game reload)",
+      "severity": "HIGH",
+      "owner": "player",
+      "owner_detail": "Reconnecting to a server without closing RedM crashes in the game-reload path. Workaround: fully close RedM between connections. Upstream issue in the RedM reload lifecycle.",
+      "cause": {
+        "headline": "Write to 0x1 in the game process ~1.2 s after connectOK on a same-process reconnect (king-mountain-alaska, b1491)",
+        "detail": "Reproduced twice with identical signature, exception and module set; three fresh-process cycles passed. 'SendNetPacket ... called from multiple threads!' appears at disconnect and again just before the crash. Same shape as the official FiveM 'only after game reloading' hashes."
+      },
+      "fix": {
+        "steps": [
+          "Close RedM completely after disconnecting (confirm no RedM process remains) before reconnecting.",
+          "Server owners: tell players not to use in-client reconnect on your server until upstream fixes it.",
+          "Report to CitizenFX with the dump; reference the same-process reconnect reproduction."
+        ],
+        "docs": "crash/redm-reconnect"
+      },
+      "signals": [
+        {
+          "type": "hash",
+          "values": [
+            "king-mountain-alaska"
+          ],
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "offset",
+          "module": "gtaprocess",
+          "offsets": {
+            "1491": "8006460"
+          },
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "SendNetPacket",
+          "weight": 2
+        },
+        {
+          "type": "platform",
+          "value": "redm",
+          "weight": 1
+        }
+      ],
+      "sources": [
+        "report:2026-07-22 OneLife RedM R3/R4 sanitized issue bundle"
+      ]
+    },
+    {
+      "id": "deliberate_stop",
+      "family": "crash.deliberate_stop",
+      "title": "FiveM/RedM stopped on purpose (0xDEED marker), reason not in the artifacts",
+      "severity": "MEDIUM",
+      "owner": "nobody",
+      "max_confidence": "MEDIUM",
+      "owner_detail": "A write to 0xDEED is the client ending itself after a condition it logged. Without the CitizenFX.log there is no way to say which condition. Upload the log and the reason is almost always on the last few lines.",
+      "cause": {
+        "headline": "Deliberate stop (write to 0xDEED) without a log to explain it",
+        "detail": "legitimacy.dll, ros-patches-five.dll, glue.dll and citizen-devtools.dll all use this marker. The specific families (ownership, ROS handshake, Vulkan memory, protection layer) need the log line that precedes the stop."
+      },
+      "fix": {
+        "steps": [
+          "Add the CitizenFX.log from the same session (or the whole CfxCrashDump zip) and analyze again.",
+          "If only the dump exists, note what the player was doing: launching, joining, or in-session."
+        ],
+        "docs": "crash/deliberate-stop"
+      },
+      "signals": [
+        {
+          "type": "address",
+          "values": [
+            "0xDEED"
+          ],
+          "weight": 4,
+          "role": "definitive"
+        }
+      ],
+      "suppressed_by": [
+        "ros_handshake",
+        "launcher_entitlement",
+        "protection_layer_generic",
+        "ownership_validation",
+        "ros_game_type_403",
+        "redm_vulkan_device_memory",
+        "redm_elevation_helper_signature",
+        "adhesive_auth_handoff"
+      ],
+      "sources": [
+        "obs:2026 citizen-devtools.dll+2CCD6 0xDEED, dump only"
+      ]
+    }
+  ],
+  "research_queue": {
+    "notes": "Hashes seen often in the wild that have no family yet. Source: 1of1 aggregate, 2026-08-26. Each becomes a family once a dump with a log is available. Also: FiveM_b3570_GTAProcess.exe+174DE8B read AV at 0x6 (2025-10-30, no log; possibly the batch-5 'item-uniform-king' offset) and steak-delta-seventeen (gta-streaming-five.dll WrapStreamingLoad, ResourceChecks.cpp:71).",
+    "hashes": [
+      "november-table-ink",
+      "october-spring-eighteen",
+      "jig-juliet-violet",
+      "two-may-edward",
+      "georgia-alaska-october"
+    ]
+  },
+  "official_hashes": {
+    "october-michigan-lithium": {
+      "text": "The game memory allocator encountered fatal corruption. This reportedly often happens when a ped dies. No other correlation is known at this time.",
+      "owner": "server_owner",
+      "owner_detail": "Allocator corruption around ped death points at a streamed ped/clothing pack or a script freeing entities badly; the server's content is the place to look.",
+      "headline": "Memory allocator corruption (often when a ped dies)",
+      "steps": [
+        "Note which ped/model was involved when it happened; correlate across players.",
+        "Remove recently added ped, clothing or weapon packs one at a time.",
+        "Check scripts that DeleteEntity/DeletePed during death handlers."
+      ],
+      "severity": "HIGH"
+    },
+    "asparagus-king-thirteen": {
+      "text": "A crash in network object cloning occurred (missing R* null pointer check). This only seems to happen after game reloading. Please try not to reload your game until this issue is fixed.",
+      "owner": "player",
+      "owner_detail": "Happens after reloading the game in-session; a full restart of FiveM avoids it.",
+      "headline": "Network object cloning crash after a game reload",
+      "steps": [
+        "Don't use the in-game 'reload' / server-switch; quit FiveM fully and relaunch before joining again.",
+        "If it repeats on a clean launch, submit the dump: it's then a different family wearing this hash."
+      ],
+      "severity": "MEDIUM"
+    },
+    "lithium-washington-whiskey": {
+      "text": "An unknown crash in network object cloning occurred. This only seems to happen after game reloading. Please try not to reload your game until this issue is fixed.",
+      "owner": "player",
+      "owner_detail": "Happens after reloading the game in-session; a full restart of FiveM avoids it.",
+      "headline": "Network object cloning crash after a game reload",
+      "steps": [
+        "Don't use the in-game 'reload' / server-switch; quit FiveM fully and relaunch before joining again.",
+        "If it repeats on a clean launch, submit the dump: it's then a different family wearing this hash."
+      ],
+      "severity": "MEDIUM"
+    },
+    "tennis-stairway-seven": {
+      "text": "A crash in vehicle sound code occurred. This appears to be caused by bad cloth data in a car mod that is loaded.",
+      "owner": "server_owner",
+      "owner_detail": "A streamed vehicle with bad cloth data. The vehicle in use (or nearby) when it crashed is the suspect.",
+      "headline": "Vehicle sound crash caused by bad cloth data in a car mod",
+      "steps": [
+        "Identify the vehicle model involved (log lines before the crash, or ask the player).",
+        "Re-export the vehicle with cloth data fixed or removed, or drop the vehicle pack."
+      ],
+      "severity": "HIGH"
+    },
+    "kansas-winner-double": {
+      "text": "A crash in ped task code occurred. This seems to be caused by rage::gameScriptHandler not being uninitialized. This only seems to happen after game reloading. Please try not to reload your game until this issue is fixed.",
+      "owner": "player",
+      "owner_detail": "Happens after reloading the game in-session; a full restart of FiveM avoids it.",
+      "headline": "Ped task crash after a game reload",
+      "steps": [
+        "Don't use the in-game 'reload' / server-switch; quit FiveM fully and relaunch before joining again.",
+        "If it repeats on a clean launch, submit the dump: it's then a different family wearing this hash."
+      ],
+      "severity": "MEDIUM"
+    },
+    "chicken-harry-undress": {
+      "text": "An unknown crash in vehicle gadget handling occurred. This might be related to car mods.",
+      "owner": "server_owner",
+      "owner_detail": "Vehicle gadget handling (tow hooks, forks, attachments) on a modded vehicle.",
+      "headline": "Vehicle gadget crash, likely a car mod",
+      "steps": [
+        "Find the vehicle involved; check its gadget/handling definitions.",
+        "Remove or fix the vehicle pack and retest."
+      ],
+      "severity": "MEDIUM"
+    },
+    "spring-montana-seventeen": {
+      "text": "A crash in ped task code occurred. This seems to be caused by rage::gameScriptHandler not being uninitialized. This only seems to happen after game reloading. Please try not to reload your game until this issue is fixed.",
+      "owner": "player",
+      "owner_detail": "Happens after reloading the game in-session; a full restart of FiveM avoids it.",
+      "headline": "Ped task crash after a game reload",
+      "steps": [
+        "Don't use the in-game 'reload' / server-switch; quit FiveM fully and relaunch before joining again.",
+        "If it repeats on a clean launch, submit the dump: it's then a different family wearing this hash."
+      ],
+      "severity": "MEDIUM"
+    },
+    "winner-florida-minnesota": {
+      "text": "A crash occurred while unloading addon models when disconnected from the current server.",
+      "owner": "nobody",
+      "owner_detail": "Happens on the way out (disconnecting). Annoying, but nothing was lost; no action unless it blocks reconnecting.",
+      "headline": "Crash unloading addon models on disconnect",
+      "steps": [
+        "Relaunch FiveM; if reconnecting fails afterwards, clear the cache."
+      ],
+      "severity": "LOW"
+    },
+    "fanta-robin-burger": {
+      "text": "An unknown crash in object replication code occurred while disconnecting from the current server.",
+      "owner": "nobody",
+      "owner_detail": "Happens on the way out (disconnecting). No action unless it blocks reconnecting.",
+      "headline": "Object replication crash on disconnect",
+      "steps": [
+        "Relaunch FiveM; if reconnecting fails afterwards, clear the cache."
+      ],
+      "severity": "LOW"
+    },
+    "sweet-sad-july": {
+      "text": "An invalid TXD reference was encountered, and the game crashed. This is a script error.",
+      "owner": "script_developer",
+      "owner_detail": "A script referenced a texture dictionary that doesn't exist or was released; CitizenFX classifies this as a script error.",
+      "headline": "Invalid TXD reference from a script",
+      "steps": [
+        "Find the last resource active in the log before the crash.",
+        "Check its RequestStreamedTextureDict / texture-dictionary names and that it doesn't use a TXD after RemoveTextureDict."
+      ],
+      "severity": "HIGH"
+    },
+    "salami-emma-purple": {
+      "text": "An unknown crash in the model info streaming module occurred. This only seems to happen after game reloading. Please try not to reload your game until this issue is fixed.",
+      "owner": "player",
+      "owner_detail": "Happens after reloading the game in-session; a full restart of FiveM avoids it.",
+      "headline": "Model info streaming crash after a game reload",
+      "steps": [
+        "Don't use the in-game 'reload' / server-switch; quit FiveM fully and relaunch before joining again.",
+        "If it repeats on a clean launch, submit the dump: it's then a different family wearing this hash."
+      ],
+      "severity": "MEDIUM"
+    }
+  },
+  "references": {
+    "notes": "Hash \u2192 where it's been discussed. gh# = citizenfx/fivem issue. Not families yet unless listed above.",
+    "november-table-ink": [
+      "gh#3032 GTA5_b3258.exe!sub_1413BF314 (40 comments)",
+      "1of1 #1 (20)"
+    ],
+    "oregon-steak-bravo": [
+      "gh#3075",
+      "kb:ERR_PLAYER_SWITCH / multichar"
+    ],
+    "kentucky-magazine-north": [
+      "gh#3810 b2944 0x77",
+      "kb:ERR_VEHICLE_POOL_FULL"
+    ],
+    "connecticut-august-cold": [
+      "gh#3225 Rockstar Editor history mode",
+      "kb:ERR_MEM_LOW_MEM"
+    ],
+    "zulu-helium-queen": [
+      "gh#3069 b3095 sub_14039F848 (0x1929), 38 comments"
+    ],
+    "three-july-avocado": [
+      "gh#4046 b3570+1378170 high-speed traversal / large MLOs; replaces #3569"
+    ],
+    "speaker-ceiling-mexico": [
+      "gh#3512 (closed)"
+    ],
+    "table-ohio-emma": [
+      "gh#3155 (closed, 45 comments)"
+    ],
+    "blue-hot-jupiter": [
+      "gh#3329 b3095 0x6D texture buffer (closed)"
+    ],
+    "carolina-december-eight": [
+      "gh#3107 (closed)"
+    ],
+    "beryllium-freddie-eleven": [
+      "gh#2665 (closed)"
+    ],
+    "maine-stairway-whiskey": [
+      "gh#3538"
+    ],
+    "yankee-lamp-alanine": [
+      "gh#2080 (not planned)"
+    ],
+    "florida-delta-ink": [
+      "forum 2022-07 b2372 +FB91A4; broken collision + bad-tool warnings"
+    ],
+    "three-magnesium-muppet": [
+      "forum 2026-01 b3258 sub_1414D18F0 (0x18d) divide-by-zero; 183 duplicate archetypes"
+    ],
+    "indigo-monkey-quiet": [
+      "forum 2026-04 fivem.exe+101C early-exit trap"
+    ],
+    "blue-pizza-jersey": [
+      "obs early-exit trap +1028"
+    ],
+    "violet-network-nitrogen": [
+      "forum 2025-05 b3258 sub_141322F74 (0x16f)"
+    ],
+    "utah-twenty-helium": [
+      "forum 2023-11"
+    ],
+    "paris-twenty-butter": [
+      "forum 2023-11"
+    ],
+    "failed-jupiter-spring": [
+      "forum 2023-08 b2944 fivem.exe+3D766A8"
+    ],
+    "indigo-tennis-edward": [
+      "obs RedM b1355 +812C928 execute violation"
+    ],
+    "mirror-bulldog-butter": [
+      "obs RedM b1355 +28843C 5-min session after script parse errors"
+    ],
+    "jig-sweet-oranges": [
+      "obs RedM b1355 gta-core-rdr3.dll+20AB4 RAGE error"
+    ],
+    "montana-salami-tennessee": [
+      "obs RedM b1355 gta-net-rdr3.dll+42030 netGameEvent pool"
+    ],
+    "one-foxtrot-salami": [
+      "obs 2024-08-22 b3258 sub_1405406D4 (0xd5); 164 collision, 36 junk stream files"
+    ],
+    "solar-music-december": [
+      "obs 2025-06-13 b1604 +1294E08 at 17 s, INIT_CORE, RTX 5070 Ti"
+    ],
+    "arkansas-sweet-bulldog": [
+      "obs 2024-04-16 b2802 sub_14076D8BC (0x5d); 299 collision, bad-tool warning"
+    ],
+    "pennsylvania-glucose-blossom": [
+      "obs b2189 +917ECB; 816 collision, 36 DLC failures"
+    ],
+    "low-cola-sweet": [
+      "obs 2025-08-30 b2944 sub_14071C644 (0xf) at 1 min; 45 duplicate archetypes, script errors"
+    ],
+    "burger-delaware-high": [
+      "obs b2944 +6864D1 STACK_OVERFLOW; 716 collision, 14 bad-tool"
+    ],
+    "solar-bluebird-hotel": [
+      "obs 2022-10-31 b2699 sub_14162E8B0 (0x35) at 2 min; 94 collision"
+    ],
+    "pip-edward-vermont": [
+      "obs 2025-01-28 b3258 sub_1403A1D08 (0x1929) = gh#3069 family"
+    ],
+    "king-mountain-alaska": [
+      "report 2026-07 RedM b1491 redm.exe+8006460 same-process reconnect"
+    ],
+    "aspen-single-music": [
+      "obs 2026 RedM b1491 glue.dll+93912 Vulkan OOM"
+    ],
+    "washington-earth-orange": [
+      "obs 2026-08 RedM b1491 glue.dll+937C2 Vulkan OOM x2"
+    ],
+    "butter-pizza-bacon": [
+      "obs 2026-06 RedM glue.dll+93762 Vulkan OOM"
+    ],
+    "london-arizona-robert": [
+      "obs 2026-07 RedM glue.dll+93842 Vulkan OOM"
+    ],
+    "carolina-network-tennis": [
+      "obs 2026-07 legitimacy.dll+6BB9C8 ownership validation"
+    ],
+    "october-bluebird-march": [
+      "obs 2026 b3258 citizen-devtools.dll+2CCD6 0xDEED, no log"
+    ],
+    "white-michigan-vegan": [
+      "forum 2025 Rockstar Editor clip load only"
+    ],
+    "sink-september-leopard": [
+      "forum 2026-05 b3258 right after video mode / backbuffer init"
+    ],
+    "helium-mexico-muppet": [
+      "gh#4037 SetPedHeadBlendData + freemode mask component (script sequencing)"
+    ],
+    "magazine-emma-twelve": [
+      "same root as arkansas-sweet-bulldog (b2802) on b2944 \u2014 map region"
+    ],
+    "double-fifteen-lima": [
+      "lemon-jig-oxygen family on later build"
+    ],
+    "nineteen-pizza-cola": [
+      "lemon-jig-oxygen family on later build"
+    ],
+    "lemon-jig-oxygen": [
+      "community deep-dive thread; YMAP/YTYP streaming family"
+    ],
+    "violet-tango-yellow": [
+      "forum 2025 post-connect; one fix: full GTA Legacy reinstall"
+    ],
+    "oven-september-spring": [
+      "forum 2026-04 multiple players one server; cache clear ineffective"
+    ],
+    "cup-diet-sink": [
+      "forum: vehicle damage; fixed by enabling OneSync"
+    ]
+  },
+  "same_root": {
+    "notes": "Hashes that are the same crash on different builds (or the same family).",
+    "arkansas-sweet-bulldog": [
+      "magazine-emma-twelve"
+    ],
+    "lemon-jig-oxygen": [
+      "double-fifteen-lima",
+      "nineteen-pizza-cola"
+    ],
+    "zulu-helium-queen": [
+      "pip-edward-vermont"
+    ],
+    "one-foxtrot-salami": [
+      "(b2612 sub_14052F438 0xd5, no hash recorded)"
+    ]
+  }
+}

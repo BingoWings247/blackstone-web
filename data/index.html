@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Contract — BlackStone Development</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--obsidian:#080B16;--paper:#E9EFFF;--muted:#8E9AC4;--dimmer:#5C6689;--cyan:#38E8FF;--violet:#A86BFF;--edge:rgba(255,255,255,.14);--edge-soft:rgba(255,255,255,.08);--glass:rgba(255,255,255,.055)}
+html{background:var(--obsidian);color:var(--paper);font-family:'IBM Plex Sans',system-ui,sans-serif;line-height:1.6}
+body{margin:0}.shell{width:min(860px,100% - 3rem);margin:0 auto;padding:1.4rem 0 5rem}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:.4rem 0 2rem}
+.wordmark{font-family:'Space Grotesk';font-weight:700;letter-spacing:.06em;color:var(--paper);text-decoration:none}.wordmark span{color:var(--muted);font-weight:500;margin-left:.5rem}
+.nav a{color:var(--muted);font-family:'JetBrains Mono';font-size:.82rem;text-decoration:none;margin-left:1.2rem}.nav a:hover{color:var(--paper)}
+h1{font-family:'Space Grotesk';font-size:2.2rem;line-height:1.1;margin:.2rem 0 1rem}h2{font-family:'Space Grotesk';font-size:1.35rem;margin:2.4rem 0 .6rem;color:var(--cyan)}h3{font-family:'Space Grotesk';font-size:1.05rem;margin:1.6rem 0 .4rem}
+a{color:var(--cyan)}code{font-family:'JetBrains Mono';font-size:.85em;background:rgba(0,0,0,.35);padding:.1em .35em;border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0}th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--edge-soft);vertical-align:top}th{color:var(--muted);font-family:'JetBrains Mono';font-size:.75rem;letter-spacing:.06em;text-transform:uppercase}
+hr{border:0;border-top:1px solid var(--edge-soft);margin:2rem 0}blockquote{border-left:3px solid var(--violet);margin:1rem 0;padding:.2rem 1rem;color:var(--muted)}
+li{margin:.25rem 0}em{color:var(--muted)}
+</style></head><body><div class="shell">
+<div class="topbar"><a class="wordmark" href="/">BLACKSTONE<span>Development</span></a><nav class="nav"><a href="/tools/crash/">Crash Parser</a><a href="/data/">Data</a><a href="/">Home</a></nav></div>
+<h1>Sentinel Data Contract</h1>
+<p><strong>Version 1.0 — draft, August 26, 2026 — BlackStone Development</strong></p>
+<p>This document is two things at once: the public promise at <code>blackstonescripts.com/data</code>, and the engineering constraint every Sentinel component is built against. If code and this document disagree, the code is the bug.</p>
+<p>It is written in plain language on purpose. If a rule can't be stated plainly, it isn't a rule yet.</p>
+<hr />
+<h2>0. Who this covers and what the words mean</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>BlackStone / we</strong></td>
+<td>BlackStone Development, operator of Sentinel and the free tools.</td>
+</tr>
+<tr>
+<td><strong>Owner</strong></td>
+<td>The person or team who links a FiveM/RedM server to Sentinel. The owner controls what their server sends and can end it at any time.</td>
+</tr>
+<tr>
+<td><strong>Player</strong></td>
+<td>Anyone who connects to an owner's server. Players never have a relationship with us; their data reaches us only through the owner's server, and the owner is responsible for telling players it does.</td>
+</tr>
+<tr>
+<td><strong>Tenant</strong></td>
+<td>One linked server and everything stored for it. Nothing crosses tenants.</td>
+</tr>
+<tr>
+<td><strong>Artifact</strong></td>
+<td>Something a person hands a free tool: a crash zip, a <code>CitizenFX.log</code>, a server console log, a <code>server.cfg</code>, a profiler JSON, a resource folder.</td>
+</tr>
+<tr>
+<td><strong>Finding</strong></td>
+<td>The structured result of analysis: what happened, why, where, who fixes it, how confident we are. Findings are the only thing Sentinel is trying to produce.</td>
+</tr>
+<tr>
+<td><strong>Pseudonym</strong></td>
+<td>A stable, one-way stand-in for a player identifier, computed on the owner's server with a key we never hold.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>1. The four classes of data</h2>
+<p>Every field that could ever pass through Sentinel belongs to exactly one class. The class decides the rule. A field with no class is not allowed to exist.</p>
+<h3>Class S — Secrets. <em>Never transmitted. Never stored.</em></h3>
+<p>Server license keys (<code>sv_licenseKey</code>), Steam Web API keys, Cfx keymaster tokens, database connection strings and passwords, Discord bot tokens, Discord webhook URLs, txAdmin credentials, any <code>rcon_password</code>, API keys for third-party resources, and anything else that grants access to something.</p>
+<ul>
+<li>The browser tools strip these before any byte leaves the browser.</li>
+<li>The agent never reads <code>server.cfg</code> or any file, and never emits a field that could hold one.</li>
+<li>The backend rejects and discards, without logging, any value matching a secret pattern that arrives anyway.</li>
+<li>If a secret ever reaches our storage through a bug, that is a security incident under §8, and the owner is told.</li>
+</ul>
+<h3>Class I — Player identifiers. <em>Pseudonymized on the owner's server. Never reversible by us.</em></h3>
+<p><code>license:</code>, <code>license2:</code>, <code>discord:</code>, <code>steam:</code>, <code>fivem:</code>, <code>xbl:</code>, <code>live:</code>, <code>ip:</code> identifiers, hardware tokens, and player IP addresses.</p>
+<ul>
+<li>The agent replaces every identifier with an HMAC-SHA256 pseudonym keyed with a <strong>tenant key generated on the owner's server at link time and stored only there.</strong> We never see the key. The same player always maps to the same pseudonym within one tenant, and to nothing across tenants.</li>
+<li>Player IP addresses are <strong>not sent at all</strong>, pseudonymized or otherwise. Sentinel has no use for them.</li>
+<li>Resolving a pseudonym back to a real player happens <strong>only on the owner's server</strong>, through the agent, on a staff request made in-game or via the portal's piggybacked command channel. The answer is shown, not stored.</li>
+<li>If an owner deletes their tenant key, every pseudonym we hold for that tenant becomes permanently meaningless. That is the intended kill switch.</li>
+</ul>
+<h3>Class N — Names and server metadata. <em>Stored, tenant-scoped, encrypted at rest.</em></h3>
+<p>Player display names (in-game character or account names as the server sees them), staff display names, resource names, event names, model names, vehicle plates, amounts, timestamps, hitch durations, artifact/build versions, agent version, resource counts, and free-text reason strings from drops, bans, and staff actions.</p>
+<ul>
+<li>Stored per tenant, encrypted at rest with a key that is unique to that tenant and is never stored in code or in the database.</li>
+<li>Free-text fields (<code>reason</code>, <code>detail</code>) are passed through a secret filter (Class S patterns) before storage, because txAdmin and other tools sometimes put things in reasons that don't belong there.</li>
+<li>Never shown outside the tenant. Never used in published aggregates in any form that could identify a server or player.</li>
+</ul>
+<h3>Class A — Aggregate and technical. <em>Stored, may be published under §6.</em></h3>
+<p>Crash signatures (build, module, offset, human-hash, exception code), finding families and confidence, resource <em>names</em> seen across servers, pool ceilings and pressure measurements, hitch cause rankings, artifact version distributions, adapter and framework in use.</p>
+<ul>
+<li>This is what makes Error Intelligence improve. It is technical data about software, not about people.</li>
+<li>Published only as aggregates that meet the threshold in §6.</li>
+</ul>
+<hr />
+<h2>2. The free hosted tools (crash parser, log analyzer, config linter, dependency graph)</h2>
+<ol>
+<li><strong>Parsing happens in your browser.</strong> Artifacts are read and analyzed locally. Nothing is uploaded by default. Closing the tab destroys everything.</li>
+<li><strong>Redaction happens before sharing, not after.</strong> If you choose <em>Share</em>, the browser applies the Class S strip and Class I pseudonymization (with a random per-share key that is discarded) before any upload. What you see in the share preview is exactly what we receive.</li>
+<li><strong>We store the finding, not the artifact.</strong> A shared report contains the structured finding, the matched signature, and a redacted excerpt of at most the log lines the finding cites. The full log, dump, or config is never stored.</li>
+<li><strong>Share links are public by design.</strong> Anyone with the link can read the redacted report. Don't share what you wouldn't post on the CFX forum. Share pages can be deleted by anyone holding the link's delete token, which is shown once at share time.</li>
+<li><strong>Unknown cases become cases.</strong> If the parser can't classify an artifact and you choose <em>Submit as unknown</em>, the same redaction applies, and the case is stored for signature research. It is never shown publicly until it becomes a named family.</li>
+<li><strong>Minidumps stay local.</strong> The browser reads the minidump to extract module, offset, and exception. The dump file itself is never uploaded, even on share, because it can contain memory contents we have no way to classify.</li>
+</ol>
+<h2>3. The on-server agent</h2>
+<p><strong>Sends:</strong> the event types in the wire protocol registry, and only those. Every batch is validated against a schema at the door; anything not in the schema is rejected with a named reason. Unrecognized event <em>types</em> from third-party SDK users are stored raw but pass through the same Class S filter.</p>
+<p><strong>Never sends:</strong> Class S, player IPs, file contents, <code>server.cfg</code>, chat messages, voice, positions/coordinates, screenshots, or anything the agent has not been explicitly coded to emit. The agent has no file-read scope except the resources folder listing needed for the Assets scanner, and that scope is announced in <code>agent.boot</code> (<code>scopes: [...]</code>) so the owner sees it every start.</p>
+<p><strong>Direction:</strong> outbound only. The agent opens every connection. There is no inbound port, no listener, and no way for our backend to execute anything on the owner's server. Portal-to-agent commands ride back in the response to the agent's own batch and are limited to a small, documented command set published with the agent's source.</p>
+<p><strong>Authentication:</strong> a per-server bearer token issued at link time, shown once, stored on our side as a hash. Rotatable and revocable from the portal instantly. Subscription lapse revokes it; the agent stops sending and says so in the server console.</p>
+<p><strong>Self-reporting:</strong> on every boot the agent emits <code>agent.boot</code> with its version, its redaction configuration, the scopes it has, and the pseudonymization key fingerprint (not the key). If redaction is misconfigured the agent refuses to send and reports why. This is ARCH Rule 1 applied to privacy.</p>
+<p><strong>Open source.</strong> The agent's code is public so any owner can verify these statements against what actually runs.</p>
+<h2>4. The SDK</h2>
+<p>Third-party developers who integrate <code>Sentinel.Error()</code>, <code>Sentinel.Metric()</code>, and friends are bound by this contract as a condition of the SDK license:</p>
+<ul>
+<li>The SDK offers no method that accepts a raw identifier; player references must go through the agent's pseudonymizer.</li>
+<li>The SDK rejects payloads that match Class S patterns and logs a warning naming the resource, so a developer who leaks a key learns about it from their own console before we ever see it.</li>
+<li>A developer's telemetry is visible to the server owner whose server produced it, and to the developer only for their own resource and only in aggregate across servers, never per-player.</li>
+</ul>
+<h2>5. What the backend stores and how</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Hosting</strong></td>
+<td>The application and database run on a managed cloud provider; the static site, docs, and browser tools are served from a separate CDN so that the free tools never touch the systems that hold tenant data. Encrypted backups are kept with a second provider so no single account failure can lose them. Named providers are listed in the Privacy Policy and Data Processing Terms.</td>
+</tr>
+<tr>
+<td><strong>Tenant isolation</strong></td>
+<td>Every query is scoped by tenant at the data layer, not the UI. There is no "all tenants" query path in the portal.</td>
+</tr>
+<tr>
+<td><strong>Encryption</strong></td>
+<td>TLS in transit everywhere. Class N encrypted at rest with a separate key per tenant; keys are never stored in code, in the database, or alongside the data they protect. Tokens stored hashed. Backups encrypted before they leave the primary provider.</td>
+</tr>
+<tr>
+<td><strong>Retention — events</strong></td>
+<td>Raw events: 30 days. Daily rollups per resource/event type: 13 months. Findings: life of the tenant. Asset snapshots: 90 days nightly plus recent incrementals.</td>
+</tr>
+<tr>
+<td><strong>Retention — free tools</strong></td>
+<td>Shared reports: until deleted by holder of the delete token, or 12 months of no views. Unknown-case submissions: until classified or 12 months.</td>
+</tr>
+<tr>
+<td><strong>Deletion</strong></td>
+<td>Owner deletes tenant → all Class N and I data purged within 7 days, backups age out within 35. Class A aggregates that can no longer be traced to the tenant remain.</td>
+</tr>
+<tr>
+<td><strong>Access on our side</strong></td>
+<td>One operator today. Every read of tenant data from an administrative path is written to an audit log the owner can see. No support access without the owner's ticket.</td>
+</tr>
+<tr>
+<td><strong>Subprocessors</strong></td>
+<td>Hosting, CDN/DNS, identity, billing, and alert delivery are each provided by a named third party. The current list lives in the Privacy Policy and Data Processing Terms, where the law requires it. Adding one requires a contract version bump and 30 days' notice.</td>
+</tr>
+<tr>
+<td><strong>Logs</strong></td>
+<td>Application logs never contain request bodies, tokens, or Class I/N values. Log lines carry tenant ID and event counts only.</td>
+</tr>
+</tbody>
+</table>
+<h2>6. Aggregates and publishing</h2>
+<p>We intend to publish aggregate findings ("what crashed in FiveM this month and why"). Rules:</p>
+<ul>
+<li>A statistic is published only when it draws on <strong>at least 10 distinct tenants</strong> or <strong>at least 25 distinct share submissions</strong>, whichever applies.</li>
+<li>Aggregates name software (resources, builds, modules, families), never servers, owners, staff, or players.</li>
+<li>Resource names appear in aggregates only when the finding is about the resource's behavior (a crash family, a pool footprint), never as a ranking or score of the resource or its author.</li>
+<li>Any owner can opt their tenant out of aggregates entirely from the portal, with no loss of function.</li>
+</ul>
+<h2>7. Owners' responsibilities and players' rights</h2>
+<ul>
+<li>The owner is the party who decides to collect player data and send it to Sentinel. We process it on the owner's behalf. Owners should say so in their server rules or privacy notice; we provide a sentence they can paste.</li>
+<li>Players may ask an owner what Sentinel holds about them. The owner resolves their pseudonym locally and can export or purge that player's tenant data from the portal.</li>
+<li>Where owners operate under GDPR, UK GDPR, or similar laws, the Data Processing Terms (a separate document) govern; this contract is the technical description they refer to.</li>
+</ul>
+<h2>8. When something goes wrong</h2>
+<ul>
+<li>We treat any suspected exposure of Class S or Class I data as a security incident.</li>
+<li>Affected owners are notified within <strong>72 hours</strong> of confirmation with what was exposed, when, what we did, and what they should do.</li>
+<li>A public post-incident summary follows within 30 days.</li>
+<li>Security researchers can report issues to the address in <code>/.well-known/security.txt</code>. We will not take legal action against good-faith research that respects owners' data.</li>
+</ul>
+<h2>9. What Sentinel is not</h2>
+<p>This section exists so the suggestions tab can point at it.</p>
+<ul>
+<li><strong>Not an anticheat.</strong> It surfaces provenance-based anomalies for humans to judge. It does not score players, predict cheating, or auto-ban.</li>
+<li><strong>Not a management tool.</strong> No kick, ban, console, or command execution. txAdmin does that.</li>
+<li><strong>Not a licence or piracy detector.</strong> The Assets scanner measures engine load; it never adjudicates whether content is legitimate.</li>
+<li><strong>Not a place for chat, voice, positions, or screenshots.</strong> None are collected.</li>
+<li><strong>Not a leaderboard of developers.</strong> No public scores of scripts or their authors are derived from tenant data.</li>
+</ul>
+<p>Requests to add any of the above will be declined with a link here.</p>
+<h2>10. Changing this contract</h2>
+<ul>
+<li>This document is versioned. Every change ships with a changelog entry and a diff.</li>
+<li>Changes that collect <em>more</em> data, add a subprocessor, or lengthen retention take effect <strong>30 days after notice</strong> to owners by email and in the portal. Changes that collect less take effect immediately.</li>
+<li>The agent reports the contract version it was built against in <code>agent.boot</code>; the portal shows it, so an owner always knows which promises their running agent honors.</li>
+</ul>
+<hr />
+<hr />
+<p><em>The engineering changes this contract requires are tracked in <code>docs/data-contract-engineering.md</code> (internal). Questions about this document: security@blackstonescripts.com. It will change. That's the point of versioning it.</em></p>
+</div></body></html>

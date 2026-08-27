@@ -1,0 +1,13 @@
+{
+  "name": "blackstone-web",
+  "version": "0.1.0",
+  "description": "blackstonescripts.com — public site and free browser-side diagnostic tools",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "serve": "npx serve ."
+  },
+  "author": "BlackStone Development",
+  "license": "MIT"
+}

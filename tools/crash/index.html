@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Parser — BlackStone Development</title>
+<meta name="description" content="Paste a FiveM crash dialog or drop the crash zip. Get the cause, who fixes it, and how. Everything runs in your browser; nothing is uploaded.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --obsidian:#080B16;--paper:#E9EFFF;--muted:#8E9AC4;--dimmer:#5C6689;
+  --cyan:#38E8FF;--violet:#A86BFF;--rose:#FF5FA2;--signal:#4BE38A;--amber:#FFC857;
+  --glass:rgba(255,255,255,.055);--glass-strong:rgba(255,255,255,.085);
+  --edge:rgba(255,255,255,.14);--edge-soft:rgba(255,255,255,.08);
+  --display:'Space Grotesk',system-ui,sans-serif;--body:'IBM Plex Sans',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;
+  --col:min(1080px,100% - 3rem);
+}
+*{box-sizing:border-box}
+html{background:var(--obsidian);color:var(--paper);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased}
+body{margin:0;min-height:100vh;background:
+  radial-gradient(1200px 600px at 10% -10%,rgba(56,232,255,.12),transparent 60%),
+  radial-gradient(900px 500px at 90% 0%,rgba(168,107,255,.12),transparent 60%),var(--obsidian)}
+a{color:var(--cyan)}
+.shell{width:var(--col);margin:0 auto;padding:1.4rem 0 5rem}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:.4rem 0 2.2rem}
+.wordmark{display:flex;align-items:baseline;gap:.55rem;font-family:var(--display);font-weight:700;letter-spacing:.06em;color:var(--paper);text-decoration:none}
+.wordmark .d{color:var(--muted);font-weight:500}
+.nav{display:flex;align-items:center;gap:1.4rem;font-family:var(--mono);font-size:.82rem;letter-spacing:.04em}
+.nav a{color:var(--muted);text-decoration:none}.nav a:hover{color:var(--paper)}
+.eyebrow{font-family:var(--mono);font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin:0 0 .6rem}
+h1{font-family:var(--display);font-size:clamp(1.9rem,4vw,2.9rem);line-height:1.08;margin:0 0 .8rem;letter-spacing:-.01em}
+.grad{background:linear-gradient(90deg,var(--cyan),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--muted);max-width:62ch;margin:0 0 1.2rem;font-size:1.05rem}
+.privacy{display:inline-flex;gap:.5rem;align-items:center;font-family:var(--mono);font-size:.78rem;color:var(--signal);border:1px solid rgba(75,227,138,.35);background:rgba(75,227,138,.06);padding:.35rem .7rem;border-radius:999px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:2rem 0 1rem}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--glass);border:1px solid var(--edge-soft);border-radius:14px;padding:1.1rem 1.2rem;backdrop-filter:blur(10px)}
+.card h2{font-family:var(--display);font-size:1rem;margin:0 0 .6rem;letter-spacing:.02em}
+.card p.hint{color:var(--dimmer);font-size:.85rem;margin:.4rem 0 0}
+textarea{width:100%;min-height:150px;resize:vertical;background:rgba(0,0,0,.35);border:1px solid var(--edge-soft);border-radius:10px;color:var(--paper);font-family:var(--mono);font-size:.8rem;padding:.7rem;outline:none}
+textarea:focus{border-color:var(--cyan)}
+.drop{border:1.5px dashed var(--edge);border-radius:12px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;color:var(--muted);cursor:pointer;transition:border-color .15s,background .15s;text-align:center;padding:1rem}
+.drop.over{border-color:var(--cyan);background:rgba(56,232,255,.06)}
+.drop strong{color:var(--paper)}
+.drop input{display:none}
+.actions{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;margin:.4rem 0 0}
+button{font-family:var(--display);font-weight:700;letter-spacing:.03em;border:0;border-radius:10px;padding:.7rem 1.15rem;cursor:pointer;background:linear-gradient(90deg,var(--cyan),var(--violet));color:#05070f;font-size:.92rem}
+button.ghost{background:transparent;color:var(--paper);border:1px solid var(--edge)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.notes{font-family:var(--mono);font-size:.76rem;color:var(--dimmer);margin:.6rem 0 0;white-space:pre-wrap}
+/* result */
+.result{margin-top:1.4rem;display:none}
+.result.show{display:block}
+.verdict{background:var(--glass-strong);border:1px solid var(--edge);border-radius:16px;padding:1.3rem 1.4rem;position:relative;overflow:hidden}
+.verdict::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--violet))}
+.badges{display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 .6rem}
+.badge{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;padding:.28rem .6rem;border-radius:999px;border:1px solid var(--edge)}
+.badge.HIGH,.badge.CRITICAL{border-color:rgba(255,95,162,.5);color:var(--rose)}
+.badge.MEDIUM{border-color:rgba(255,200,87,.5);color:var(--amber)}
+.badge.LOW,.badge.INFO{border-color:rgba(142,154,196,.5);color:var(--muted)}
+.badge.conf{border-color:rgba(56,232,255,.4);color:var(--cyan)}
+.verdict h3{font-family:var(--display);font-size:1.45rem;margin:.2rem 0 .3rem;line-height:1.2}
+.verdict .why{color:var(--muted);margin:0 0 1rem}
+.owner{display:grid;grid-template-columns:auto 1fr;gap:.9rem;align-items:start;background:rgba(0,0,0,.28);border:1px solid var(--edge-soft);border-radius:12px;padding:.9rem 1rem;margin:0 0 1rem}
+.owner .who{font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--signal);padding-top:.15rem;white-space:nowrap}
+.owner .who b{display:block;font-family:var(--display);font-size:1.05rem;letter-spacing:0;text-transform:none;color:var(--paper);margin-top:.15rem}
+.owner p{margin:0;color:var(--paper)}
+ol.fix{margin:.2rem 0 0;padding-left:1.2rem}ol.fix li{margin:.3rem 0}
+.cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem}
+@media (max-width:820px){.cols{grid-template-columns:1fr}}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;font-size:.85rem}
+dt{color:var(--dimmer);font-family:var(--mono);font-size:.74rem;padding-top:.15rem}
+dd{margin:0;font-family:var(--mono);font-size:.8rem;word-break:break-all}
+ul.ev{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:.76rem}
+ul.ev li{padding:.35rem 0;border-bottom:1px solid var(--edge-soft);color:var(--muted)}
+ul.ev li span{color:var(--paper)}
+details{margin-top:1rem}summary{cursor:pointer;font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+pre.tail{background:rgba(0,0,0,.4);border:1px solid var(--edge-soft);border-radius:10px;padding:.8rem;font-size:.72rem;max-height:320px;overflow:auto;color:var(--muted);margin:.6rem 0 0}
+.alt{font-family:var(--mono);font-size:.76rem;color:var(--dimmer);margin:.8rem 0 0}
+.foot{color:var(--dimmer);font-size:.8rem;margin-top:2.5rem;font-family:var(--mono)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <a class="wordmark" href="/"><span>BLACKSTONE</span><span class="d">Development</span></a>
+    <nav class="nav" aria-label="Sections">
+      <a href="/tools/crash/">Crash Parser</a>
+      <a href="/data/">Data</a>
+      <a href="/">Home</a>
+    </nav>
+  </div>
+
+  <header>
+    <p class="eyebrow">Free tool · FiveM &amp; RedM</p>
+    <h1>Crash Parser: <span class="grad">the cause, and who fixes it.</span></h1>
+    <p class="lead">Paste the crash dialog, or drop the crash zip FiveM saved. You get the crash family, why it happened, whether it's on the player, the server owner, or a script author, and what to do next.</p>
+    <span class="privacy">● Runs in your browser. Nothing is uploaded.</span>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Paste the crash message</h2>
+      <textarea id="paste" placeholder="Crash signature: GTA5_b3258.exe+7252AB
+Legacy crash hash: virginia-october-hydrogen
+
+…or paste the last lines of CitizenFX.log, or crashometry.json"></textarea>
+      <p class="hint">Ctrl+C on the FiveM crash dialog copies the whole message. Analysis runs as soon as you paste or drop.</p>
+    </section>
+    <section class="card">
+      <h2>Or drop the crash files</h2>
+      <label class="drop" id="drop">
+        <input type="file" id="file" multiple accept=".zip,.dmp,.log,.json,.txt">
+        <strong>Drop CfxCrashDump_….zip here</strong>
+        <span>or a .dmp, CitizenFX.log, crashometry.json · click to browse</span>
+      </label>
+      <p class="hint">Found in <code>%localappdata%\FiveM\FiveM.app\crashes</code>. The minidump is read for module, offset and exception only; memory contents are never read.</p>
+    </section>
+  </div>
+
+  <div class="actions">
+    <button id="run">Analyze again</button>
+    <button id="clear" class="ghost">Clear</button>
+    <span id="status" class="notes"></span>
+  </div>
+  <div id="notes" class="notes"></div>
+
+  <section class="result" id="result" aria-live="polite">
+    <div class="verdict">
+      <div class="badges" id="badges"></div>
+      <h3 id="title"></h3>
+      <p class="why" id="why"></p>
+      <div class="owner">
+        <div class="who">Who fixes it<b id="ownerName"></b></div>
+        <p id="ownerDetail"></p>
+      </div>
+      <div><strong>What to do</strong><ol class="fix" id="fix"></ol></div>
+      <div class="actions" style="margin-top:1rem">
+        <button id="copy" class="ghost">Copy report</button>
+        <button id="download" class="ghost">Download report (.json)</button>
+        <button id="submit" class="ghost" disabled title="Share links and unknown-case submission arrive with accounts">Share link · soon</button>
+      </div>
+      <p class="alt" id="alts"></p>
+    </div>
+
+    <div class="cols">
+      <section class="card"><h2>Crash</h2><dl id="crash"></dl></section>
+      <section class="card"><h2>System</h2><dl id="system"></dl></section>
+      <section class="card"><h2>Evidence</h2><ul class="ev" id="evidence"></ul></section>
+    </div>
+
+    <details id="tailWrap"><summary>Last log lines (redacted)</summary><pre class="tail" id="tail"></pre></details>
+    <details><summary>Finding (JSON, redacted)</summary><pre class="tail" id="json"></pre></details>
+  </section>
+
+  <p class="foot">Signature database <span id="sigver"></span> · Families are data, not code; unknowns are how the database grows. Read the <a href="/data/">data contract</a>.</p>
+</div>
+
+<script type="module">
+import { analyze } from '../shared/crash-engine.js';
+import { checkFinding } from '../shared/finding-check.js';
+import { ingestFiles, mergeText } from '../shared/pipeline.js';
+import { redactText } from '../shared/redact.js';
+
+const $ = (id) => document.getElementById(id);
+let signatures = null;
+let pendingFiles = [];
+let last = null;
+
+async function loadSignatures() {
+  const res = await fetch('../shared/signatures.json', { cache: 'no-cache' });
+  signatures = await res.json();
+  $('sigver').textContent = `v${signatures.version} · ${signatures.families.length} families`;
+}
+loadSignatures().catch(() => { $('sigver').textContent = 'failed to load'; });
+
+const drop = $('drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); queue([...e.dataTransfer.files]); });
+$('file').addEventListener('change', (e) => queue([...e.target.files]));
+function queue(files) {
+  pendingFiles = files;
+  drop.querySelector('strong').textContent = files.map((f) => f.name).join(', ') || 'Drop CfxCrashDump_….zip here';
+  $('status').textContent = `${files.length} file(s) ready`;
+  if (files.length) run();               // dropping a crash file IS the request
+}
+// Pasted text analyzes on its own once typing stops.
+let pasteTimer = null;
+$('paste').addEventListener('input', () => { clearTimeout(pasteTimer); pasteTimer = setTimeout(() => { if ($('paste').value.trim().length > 20) run(); }, 700); });
+$('paste').addEventListener('paste', () => { clearTimeout(pasteTimer); pasteTimer = setTimeout(run, 150); });
+
+$('clear').addEventListener('click', () => {
+  pendingFiles = []; $('paste').value = ''; $('file').value = ''; last = null;
+  drop.querySelector('strong').textContent = 'Drop CfxCrashDump_….zip here';
+  $('status').textContent = ''; $('notes').textContent = ''; $('result').classList.remove('show');
+});
+
+$('run').addEventListener('click', run);
+let running = false;
+async function run() {
+  if (running) return;
+  if (!signatures) { $('status').textContent = 'signature database still loading…'; setTimeout(run, 400); return; }
+  running = true;
+  try { await runInner(); } catch (e) { $('status').textContent = `error: ${e.message}`; console.error(e); } finally { running = false; }
+}
+async function runInner() {
+  const inputs = {}; const notes = [];
+  $('status').textContent = 'reading…';
+  try {
+    if (pendingFiles.length) await ingestFiles(pendingFiles, inputs, notes);
+    if ($('paste').value.trim()) mergeText($('paste').value, inputs, notes);
+  } catch (e) { notes.push(`error: ${e.message}`); }
+  $('notes').textContent = notes.join('\n');
+  if (!inputs.dump && !inputs.log && !inputs.dialog && !inputs.crashometry) { $('status').textContent = 'nothing to analyze yet'; return; }
+  const { report, finding } = analyze(inputs, signatures);
+  const chk = checkFinding(finding);
+  if (!chk.ok) { $('status').textContent = `finding rejected by privacy gate: ${chk.error.field} (${chk.error.detail})`; return; }
+  last = { report, finding };
+  render(report, finding);
+  $('status').textContent = 'done';
+}
+
+const OWNER_LABEL = { player: 'The player', server_owner: 'The server owner', script_developer: 'The script author', platform: 'FiveM / Rockstar', nobody: 'Not yet known' };
+
+function render(report, f) {
+  $('badges').innerHTML = '';
+  for (const [cls, txt] of [[f.severity, `severity ${f.severity}`], ['conf', `confidence ${f.confidence}`], ['', f.family]]) {
+    const b = document.createElement('span'); b.className = `badge ${cls}`; b.textContent = txt; $('badges').appendChild(b);
+  }
+  $('title').textContent = f.cause.headline;
+  $('why').textContent = f.cause.detail || f.summary;
+  $('ownerName').textContent = OWNER_LABEL[f.owner] || f.owner;
+  $('ownerDetail').textContent = f.owner_detail || '';
+  $('fix').innerHTML = ''; for (const s of f.fix?.steps || []) { const li = document.createElement('li'); li.textContent = s; $('fix').appendChild(li); }
+  $('alts').textContent = f.alternatives?.length ? 'Also considered: ' + f.alternatives.map((a) => `${a.detail}`).join(' · ') : '';
+
+  const dl = (el, rows) => { el.innerHTML = ''; for (const [k, v] of rows) { if (v == null || v === '') continue; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; el.append(dt, dd); } };
+  dl($('crash'), [
+    ['signature', report.module ? `${report.module}+0x${report.offset || '?'}` : null],
+    ['hash', report.hash], ['build', report.build ? `b${report.build}` : null],
+    ['exception', report.exception ? `${report.exception}${report.exception_name ? ' ' + report.exception_name : ''}` : null],
+    ['violation', report.violation], ['address', report.address], ['exit code', report.exit_code],
+    ['pool', report.pool_error], ['session', report.session_ms ? `${Math.round(report.session_ms / 60000)} min` : null],
+  ]);
+  dl($('system'), [['OS', report.os], ['GPU', report.gpu], ['server build', report.server_ver], ['OneSync', report.onesync == null ? null : String(report.onesync)], ['file', report.filename]]);
+  $('evidence').innerHTML = '';
+  for (const e of f.evidence) { const li = document.createElement('li'); li.innerHTML = `<span></span> <em></em>`; li.querySelector('span').textContent = e.excerpt || ''; li.querySelector('em').textContent = e.ref; $('evidence').appendChild(li); }
+  $('tail').textContent = report.log_tail.join('\n'); $('tailWrap').style.display = report.log_tail.length ? '' : 'none';
+  $('json').textContent = JSON.stringify(f, null, 2);
+  $('result').classList.add('show');
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function reportText(f, r) {
+  return [
+    `Crash Parser — blackstonescripts.com/tools/crash`,
+    `${f.family} · severity ${f.severity} · confidence ${f.confidence}`,
+    `Cause: ${f.cause.headline}`,
+    `Who fixes it: ${OWNER_LABEL[f.owner] || f.owner} — ${f.owner_detail || ''}`,
+    r.module ? `Signature: ${r.module}+0x${r.offset || '?'}${r.build ? ` (b${r.build})` : ''}` : null,
+    r.hash ? `Hash: ${r.hash}` : null,
+    r.exception ? `Exception: ${r.exception}${r.violation ? ` (${r.violation})` : ''}` : null,
+    'Steps:', ...(f.fix?.steps || []).map((s, i) => `  ${i + 1}. ${s}`),
+  ].filter(Boolean).join('\n');
+}
+$('copy').addEventListener('click', async () => { if (!last) return; await navigator.clipboard.writeText(redactText(reportText(last.finding, last.report)).text); $('status').textContent = 'copied'; });
+$('download').addEventListener('click', () => {
+  if (!last) return;
+  const blob = new Blob([JSON.stringify(last.finding, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `finding-${last.finding.family}.json`; a.click();
+});
+</script>
+</body>
+</html>
