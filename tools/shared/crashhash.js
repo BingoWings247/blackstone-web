@@ -68,6 +68,34 @@ export function signatureToHash(module, offset) {
   return { signature: sig, id, words: idToWords(id) };
 }
 
+/**
+ * The key CitizenFX looks up in its crash-data.json (MiniDump.cpp:1354-1375): HashCrash of the signature
+ * as the dialog DISPLAYS it, not the legacy one. Game-process crashes are displayed by UnblameCrash as
+ * GTA5_b<build>.exe+X / RDR2_b<build>.exe+X, so they need the build; DLL crashes are displayed unchanged,
+ * so their key equals the legacy hash. Returns null for a game-process crash with no known build.
+ * (When CFX's symbolication succeeds the dialog shows a "module!sub_X (0xN)" form instead; use symbolicKey.)
+ */
+export function crashDataKey(module, offset, build) {
+  const sig = canonicalSignature(module, offset);
+  if (!sig) return null;
+  const plus = sig.indexOf('+');
+  const m = sig.slice(0, plus);
+  let shown = sig;
+  if (m === 'fivem.exe' || m === 'redm.exe') {
+    if (!build) return null;
+    shown = `${m === 'fivem.exe' ? 'GTA5' : 'RDR2'}_b${build}.exe${sig.slice(plus)}`;
+  }
+  const id = joaat(shown);
+  return { signature: shown, id, words: idToWords(id) };
+}
+
+/** crash-data.json key for a symbolicated signature exactly as displayed, e.g. "RDR2_b1491.exe!sub_142599A9C (0x7)". */
+export function symbolicKey(displayed) {
+  if (!displayed) return null;
+  const id = joaat(String(displayed).trim());
+  return { signature: String(displayed).trim(), id, words: idToWords(id) };
+}
+
 /** Are all three words real? Catches typos in pasted hashes. Returns { ok, bad: [word] }. */
 export function validateWords(hash) {
   const parts = String(hash || '').toLowerCase().split('-');
