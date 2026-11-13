@@ -590,7 +590,12 @@ export function analyze(inputs, signatures, { now = Date.now() } = {}) {
   const P = (t) => platformize(t, report.platform);
   const evidence = [];
   for (const h of best.hits) evidence.push({ kind: h.kind, ref: h.ref, excerpt: excerpt(h.excerpt) });
-  for (const e of [...crashEvidence(report), ...artifactEvidence(report, signatures)]) if (!evidence.some((x) => x.ref === e.ref && x.excerpt === excerpt(e.excerpt))) evidence.push({ ...e, excerpt: excerpt(e.excerpt) });
+  // One entry per evidence kind, except kinds that can legitimately repeat (several artifact issues, say).
+  const MULTI = new Set(['server_artifact_known_issue', 'rage_error']);
+  for (const e of [...crashEvidence(report), ...artifactEvidence(report, signatures)]) {
+    const ex = excerpt(e.excerpt);
+    if (!evidence.some((x) => x.ref === e.ref && (!MULTI.has(e.ref) || x.excerpt === ex))) evidence.push({ ...e, excerpt: ex });
+  }
 
   const finding = {
     ...base,
