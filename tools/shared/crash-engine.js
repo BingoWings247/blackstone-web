@@ -12,9 +12,10 @@
 // so a finding is safe to display or share the moment it exists.
 
 import { redactText } from './redact.js';
-import { signatureToHash, validateWords, hashMatchesSignature } from './crashhash.js';
+import { signatureToHash, validateWords, hashMatchesSignature, crashDataKey, symbolicKey } from './crashhash.js';
+import { errName, errFamily } from './err-codes.js';
 
-export const ENGINE_VERSION = '0.1.0';
+export const ENGINE_VERSION = '0.2.0';
 const DOCS_BASE = 'https://docs.blackstonescripts.com/';
 
 // ---- Extraction -----------------------------------------------------------
@@ -33,7 +34,23 @@ const RE = {
   violation: /\b(read|write|execute)\b(?:\s+(?:at|of))?\s+(?:null|address|0x)/i,
   logBuild: /\[(?:RedM_)?b(\d{4})_(?:GTAProce|GTA|DumpServ|Dum)\]/,
   logRedM: /\[RedM_b\d{4}_|RedM_b\d{4}_GTAProcess|caused RedM to stop/,
-  notable: /error|assert|pool full|pool space|fail|exception|crash|timed out|ExitCode|duplicate archetype|inflate|bad_alloc|physics validation|Invoking CRenderer INIT_CORE|SIGSEGV|Managed Stacktrace|heap limit|early-exit trap|bad tool|no streaming module|cf-error|RAGE error|Vulkan|game ownership|elevation helper|game type|SendNetPacket|connectOK|Obtained error from CPR/i,
+  notable: /error|assert|pool full|pool space|fail|exception|crash|timed out|ExitCode|duplicate archetype|inflate|bad_alloc|physics validation|Invoking CRenderer INIT_CORE|SIGSEGV|Managed Stacktrace|heap limit|early-exit trap|bad tool|no streaming module|cf-error|RAGE error|Vulkan|game ownership|elevation helper|game type|SendNetPacket|connectOK|Obtained error from CPR|overflow|stopped responding|GTA V Enhanced|Enhanced edition|Reference hash|Disk hash|Resource name/i,
+  // RAGE errors (gta-core-rdr3/src/ErrorHandler.cpp, built into FiveM too)
+  rageNamed: /RAGE error:\s*(ERR_[A-Z0-9_]+|UNKNOWN)\b/,
+  rageCodeless: /RAGE error:\s*0x([0-9A-Fa-f]{1,8}):(\d+)/,
+  gameErrorAt: /A game error \(at ([0-9A-Fa-f]{8,16})\)/,
+  // Error.cpp:296-311: a second error while handling the first. The ORIGINAL error is the real one.
+  recursive: /Recursive(?:-recursive)? error:/,
+  original: /Original error:\s*([\s\S]+)$/,
+  // ResourceCacheDeviceV2.cpp:979, the inflate dialog's resource block
+  refHash: /Reference hash:\s*([0-9a-f]{40})/i,
+  diskHash: /Disk hash:\s*([0-9a-f]{40})/i,
+  resourceName: /Resource name:\s*([^\r\n]+)/,
+  // citizen-devtools ResourceTimeWarnings.cpp:197-216, the watchdog
+  stoppedResponding: /has stopped responding\s*(?:\((NVIDIA drivers|script deadloop|DirectX query)\))?/i,
+  dialogStart: /Process crash captured\. Crash dialog content:/,
+  dialogEnd: /Crash report service returned|Error uploading crash|Process crash captured/,
+  logPrefix: /^\[\s*\d+\]\s*\[[^\]]*\]\s*[^/]*\/\s?/,
 };
 
 function normModule(name) {
@@ -89,6 +106,52 @@ function scanText(text, report, source) {
   if (ad && !report.address) report.address = '0x' + normHex(ad[1]);
   const vi = text.match(RE.violation);
   if (vi && !report.violation) report.violation = vi[1].toLowerCase();
+  scanFacts(text, report, source);
+}
+
+/** Facts that need no family to be useful: RAGE error code, inflate hash pair, watchdog reason. */
+function scanFacts(text, report, source) {
+  const rn = text.match(RE.rageNamed);
+  if (rn && !report.rage_text) { report.rage_text = rn[1]; report.sources.rage_text = source; }
+  const rc = text.match(RE.rageCodeless);
+  if (rc && !report.rage_codeless) report.rage_codeless = { file: '0x' + rc[1].toUpperCase(), line: Number(rc[2]) };
+  const ga = text.match(RE.gameErrorAt);
+  if (ga && !report.game_error_at) report.game_error_at = '0x' + normHex(ga[1]);
+  const rh = text.match(RE.refHash), dh = text.match(RE.diskHash);
+  if (rh && !report.inflate_ref) report.inflate_ref = rh[1].toLowerCase();
+  if (dh && !report.inflate_disk) report.inflate_disk = dh[1].toLowerCase();
+  const rs = text.match(RE.resourceName);
+  if (rs && !report.inflate_resource) report.inflate_resource = rs[1].trim().slice(0, 80);
+  const sr = text.match(RE.stoppedResponding);
+  if (sr && !report.hang_reason) report.hang_reason = !sr[1] ? 'unknown' : /nvidia/i.test(sr[1]) ? 'nvidia' : /script/i.test(sr[1]) ? 'script' : 'directx';
+}
+
+/** Dialog text lines, searched by 'log' signals alongside the log's notable lines. */
+function addDialogLines(text, report, source) {
+  for (const line of String(text).split(/\r?\n/)) {
+    const t = line.trim();
+    if (t && !report.dialog_lines.some((d) => d.text === t)) report.dialog_lines.push({ n: source, text: t });
+  }
+}
+
+/** "Recursive error: X / Original error: Y": Y is the real error; X is a side effect of crashing. */
+function unwrapRecursive(text) {
+  if (!text || !RE.recursive.test(text)) return null;
+  const parts = text.split(/Original error:/);
+  return parts.length > 1 ? parts[parts.length - 1].trim() : null;
+}
+
+/** The dialog the player saw, as CitizenFX logged it after the crash ("Process crash captured. Crash dialog content:"). */
+function dialogFromLog(lines) {
+  const i = lines.findIndex((l) => RE.dialogStart.test(l));
+  if (i < 0) return null;
+  const out = [];
+  for (const l of lines.slice(i + 1, i + 20)) {
+    if (RE.dialogEnd.test(l)) break;
+    out.push(l.replace(RE.logPrefix, '').trimEnd());
+  }
+  const t = out.join('\n').trim();
+  return t || null;
 }
 
 function scanLog(text, report) {
@@ -117,6 +180,14 @@ function scanLog(text, report) {
     if (ts) { report.session_ms = Number(ts[1]); break; }
   }
   report.log_tail = lines.slice(-80).map((l) => redactText(l).text);
+  const dlg = dialogFromLog(lines);
+  if (dlg) {
+    report.dialog_from_log = redactText(dlg).text.slice(0, 2000);
+    const orig = unwrapRecursive(dlg);
+    if (orig && !report.original_error) { report.original_error = redactText(orig).text.slice(0, 300); scanText(orig, report, 'log_dialog'); }
+    addDialogLines(dlg, report, 'log_dialog');
+    scanText(dlg, report, 'log_dialog');
+  }
   scanText(notable.map((l) => l.text).join('\n'), report, 'log');
 }
 
@@ -141,6 +212,14 @@ function scanCrashometry(c, report) {
   if (typeof obj.crashometry_gpu_name === 'string') report.gpu = obj.crashometry_gpu_name;
   if (typeof obj.crashometry_last_server_ver === 'string') report.server_ver = obj.crashometry_last_server_ver;
   if (obj.crashometry_onesync_enabled != null) report.onesync = String(obj.crashometry_onesync_enabled) === 'true';
+  if (typeof obj.crashometry_gpu_id === 'string') report.gpu_id = obj.crashometry_gpu_id;
+  // Only RedM (Vulkan) records the driver version (rage-graphics-rdr3 RenderHooks.cpp:230-239). FiveM never does.
+  for (const [k, vendor] of [['crashometry_nvidia_driver', 'NVIDIA'], ['crashometry_intel_driver', 'Intel'], ['crashometry_driver', null]]) {
+    if (typeof obj[k] === 'string' && !report.driver) report.driver = vendor ? `${vendor} ${obj[k]}` : obj[k];
+  }
+  if (typeof obj.crashometry_vulkan_api_version === 'string') report.vulkan_api = obj.crashometry_vulkan_api_version;
+  if (typeof obj.crashometry_invalid_pool_size_increase_used === 'string') report.pool_validation_skipped = obj.crashometry_invalid_pool_size_increase_used;
+  if (typeof obj.crashometry_init_function === 'string') report.init_function = obj.crashometry_init_function;
   // crashometry_last_server / _url identify the server (address). Deliberately not carried into the report.
   const rest = { ...obj }; delete rest.crashometry_last_server; delete rest.crashometry_last_server_url;
   scanText(flattenJson(rest).join('\n'), report, 'crashometry');
@@ -174,9 +253,19 @@ export function extract(inputs = {}) {
     pool_error: null, gpu: null, server_ver: null, onesync: null, session_ms: null, os: null, exception_name: null,
     platform: null, symbol: null, symbol_offset: null,
     hash_derived: null, hash_id: null, hash_consistent: null, hash_valid: null,
+    crashdata_key: null, symbolic_key: null, dialog_lines: [], dialog_from_log: null, original_error: null,
+    write_class: null, rage: null, rage_family: null, rage_text: null, rage_codeless: null, game_error_at: null, five_byte_ok: null,
+    inflate_ref: null, inflate_disk: null, inflate_resource: null, inflate_match: null, hang_reason: null,
+    gpu_id: null, driver: null, vulkan_api: null, pool_validation_skipped: null, init_function: null,
+    server_artifact: null,
     sources: {},
   };
   applyDump(inputs.dump, report);
+  if (inputs.dialog) {
+    const orig = unwrapRecursive(inputs.dialog);
+    if (orig) { report.original_error = redactText(orig).text.slice(0, 300); scanText(orig, report, 'dialog'); }
+    addDialogLines(inputs.dialog, report, 'dialog');
+  }
   scanText(inputs.dialog, report, 'dialog');
   scanCrashometry(inputs.crashometry, report);
   scanLog(inputs.log, report);
@@ -190,7 +279,45 @@ export function extract(inputs = {}) {
     else report.hash_consistent = hashMatchesSignature(report.hash, report.module, report.offset);
   }
   if (report.hash) report.hash_valid = validateWords(report.hash).ok;
+
+  // The key CitizenFX's own crash-data.json is looked up by (see crashhash.js crashDataKey).
+  if (report.module && report.offset) report.crashdata_key = crashDataKey(report.module, report.offset, report.build)?.words || null;
+  const symText = [inputs.dialog, report.dialog_from_log].filter(Boolean).join('\n').match(RE.symbolSig);
+  if (symText) report.symbolic_key = symbolicKey(symText[0]).words;
+
+  if (report.inflate_ref && report.inflate_disk) report.inflate_match = report.inflate_ref === report.inflate_disk;
+  const av = String(report.server_ver || '').match(/v1\.0\.0\.(\d+)/);
+  if (av) report.server_artifact = Number(av[1]);
+  classifyWrite(report);
   return report;
+}
+
+/**
+ * What the crash wrote to, which says what kind of stop it was (verified on real dumps, 2026-11-13):
+ *   0x10_<id>  RAGE error: the low 32 bits are the ERR code id (ErrorHandler.cpp:94-118). id 0 = "UNKNOWN".
+ *   0xDEED     CitizenFX fatal error (Error.h ERROR_CRASH_MAGIC): classify by the error TEXT, not the module.
+ *   0x0        Same, from clients older than 2021-12-08 (FatalError wrote to 0 before commit 9a37a644c);
+ *              only trusted when a code-less "RAGE error: 0xFILE:LINE" text backs it up.
+ */
+function classifyWrite(report) {
+  if (report.violation === 'write' && report.address) {
+    let a = null;
+    try { a = BigInt(report.address); } catch { a = null; }
+    if (a != null && (a >> 32n) === 0x10n) {
+      const id = Number(a & 0xffffffffn);
+      const name = errName(id);
+      report.write_class = 'rage_marker';
+      report.rage = { id: '0x' + id.toString(16).toUpperCase().padStart(8, '0'), name: name || null, family: errFamily(name), source: 'dump' };
+    } else if (a === 0xDEEDn) report.write_class = 'cfx_fatal';
+    else if (a === 0n && report.rage_codeless && report.module_canon !== 'gtaprocess') report.write_class = 'cfx_fatal_legacy';
+  }
+  if (!report.rage && report.rage_text) report.rage = { id: null, name: report.rage_text, family: errFamily(report.rage_text), source: 'text' };
+  else if (report.rage && report.rage_text && report.rage.name && report.rage_text !== report.rage.name) report.rage.text_disagrees = report.rage_text;
+  report.rage_family = report.rage?.family || null;
+  // The dialog prints the return address; the faulting write is one 5-byte CALL before it.
+  if (report.game_error_at && report.module_canon === 'gtaprocess' && report.offset) {
+    try { report.five_byte_ok = BigInt(report.game_error_at) - 0x140000000n - 5n === BigInt('0x' + report.offset); } catch { /* leave null */ }
+  }
 }
 
 // ---- Matching --------------------------------------------------------------
@@ -200,11 +327,13 @@ function signalHits(sig, report) {
   switch (sig.type) {
     case 'log': {
       const needle = sig.pattern.toLowerCase();
-      const lines = report.notable.filter((l) => l.text.toLowerCase().includes(needle));
+      // The dialog (pasted, or as CitizenFX logged it) counts as well as the log's own lines.
+      const lines = [...report.notable, ...report.dialog_lines].filter((l) => l.text.toLowerCase().includes(needle));
       if (lines.length) {
         let w = sig.weight;
         if (sig.role === 'precursor' && lines.length > 5) w += 1;
-        hits.push({ weight: w, kind: 'log_line', ref: `log:${lines[0].n}`, excerpt: lines[0].text, count: lines.length, role: sig.role });
+        const ref = typeof lines[0].n === 'number' ? `log:${lines[0].n}` : lines[0].n;
+        hits.push({ weight: w, kind: 'log_line', ref, excerpt: lines[0].text, count: lines.length, role: sig.role });
       }
       break;
     }
@@ -231,6 +360,13 @@ function signalHits(sig, report) {
       const mine = [report.hash, report.hash_derived].filter(Boolean).map((x) => x.toLowerCase());
       const hit = sig.values.find((v) => mine.includes(v.toLowerCase()));
       if (hit) hits.push({ weight: sig.weight, kind: 'crash_field', ref: 'hash', excerpt: hit, role: sig.role });
+      break;
+    }
+    case 'crashdata_key': {
+      // Official entries: the display-form key, or (hash-only input) the pasted legacy hash.
+      const mine = [report.crashdata_key, report.symbolic_key, report.module ? null : report.hash].filter(Boolean).map((x) => x.toLowerCase());
+      const hit = sig.values.find((v) => mine.includes(v.toLowerCase()));
+      if (hit) hits.push({ weight: sig.weight, kind: 'crash_field', ref: 'crash_data_key', excerpt: hit, role: sig.role });
       break;
     }
     case 'exception':
@@ -281,6 +417,9 @@ function signalHits(sig, report) {
       }
       break;
     }
+    case 'write_class':
+      if (report.write_class === sig.value) hits.push({ weight: sig.weight, kind: 'crash_field', ref: 'write_target', excerpt: `${report.violation} to ${report.address}${report.rage?.name ? ` (${report.rage.name})` : ''}`, role: sig.role });
+      break;
     case 'platform':
       if (report.platform === sig.value) hits.push({ weight: sig.weight, kind: 'crash_field', ref: 'platform', excerpt: report.platform, role: sig.role });
       break;
@@ -297,16 +436,19 @@ export function match(report, signatures) {
   const families = [...signatures.families];
   // Official CitizenFX crash-data.json entries become families on the fly (hash is the only signal, but it's authoritative).
   const known = signatures.official_hashes || {};
-  const myHashes = [report.hash, report.hash_derived].filter(Boolean).map((x) => x.toLowerCase());
-  for (const h of myHashes) {
+  // CitizenFX keys crash-data.json on the DISPLAYED signature (crashDataKey / symbolicKey), not the legacy hash.
+  // A pasted legacy hash with no signature is still tried: for DLL crashes it IS the display key.
+  const myHashes = [report.crashdata_key, report.symbolic_key].filter(Boolean);
+  if (!report.module && report.hash) myHashes.push(report.hash);
+  for (const h of [...new Set(myHashes.map((x) => x.toLowerCase()))]) {
     const k = known[h];
     if (!k) continue;
     families.push({
-      id: `cfx_${h}`, family: `crash.cfx_known.${h.replace(/-/g, '_')}`, title: `Known to CitizenFX: ${h}`,
+      id: `cfx_${h}`, family: `crash.cfx_known.${h.replace(/-/g, '_')}`, title: `Known to CitizenFX: ${h}`, authoritative: true,
       severity: k.severity || 'MEDIUM', owner: k.owner, owner_detail: k.owner_detail,
       cause: { headline: k.headline, detail: `CitizenFX's own crash dictionary says: "${k.text}"` },
       fix: { steps: k.steps, docs: 'crash/cfx-known' },
-      signals: [{ type: 'hash', values: [h], weight: 8, role: 'definitive' }],
+      signals: [{ type: 'crashdata_key', values: [h], weight: 8, role: 'definitive' }],
       sources: ['cfx:crash-data.json'],
     });
   }
@@ -327,7 +469,8 @@ export function match(report, signatures) {
   const strong = new Set(candidates.filter((c) => c.score >= th.medium).map((c) => c.family.id));
   candidates = candidates.filter((c) => !(c.family.suppressed_by || []).some((id) => strong.has(id)));
 
-  candidates.sort((a, b) => b.score - a.score || (b.definitive - a.definitive));
+  // CitizenFX's own crash-data.json entry is keyed on this exact build+location: it outranks our generic families.
+  candidates.sort((a, b) => (!!b.family.authoritative - !!a.family.authoritative) || b.score - a.score || (b.definitive - a.definitive));
   const best = candidates.length && candidates[0].score >= th.medium ? candidates[0] : null;
   return { candidates, best };
 }
@@ -359,7 +502,37 @@ function crashEvidence(report) {
   if (report.gpu) ev.push({ kind: 'crash_field', ref: 'gpu', excerpt: report.gpu });
   if (report.os) ev.push({ kind: 'crash_field', ref: 'os', excerpt: report.os });
   if (report.platform === 'redm') ev.push({ kind: 'crash_field', ref: 'platform', excerpt: 'RedM' });
+  if (report.rage) ev.push({ kind: 'crash_field', ref: 'rage_error', excerpt: `${report.rage.name || 'code not in table'}${report.rage.id ? ` (${report.rage.id})` : ''}, from the ${report.rage.source === 'dump' ? 'dump write target' : 'error text'}` });
+  if (report.rage_codeless) ev.push({ kind: 'crash_field', ref: 'rage_error', excerpt: `RAGE error ${report.rage_codeless.file}:${report.rage_codeless.line} (source-file hash and line; no error code)` });
+  if (report.write_class === 'cfx_fatal' || report.write_class === 'cfx_fatal_legacy') ev.push({ kind: 'crash_field', ref: 'write_target', excerpt: `${report.address}: a deliberate CitizenFX stop after a fatal error; the error text is the cause, not the module` });
+  if (report.five_byte_ok === false) ev.push({ kind: 'crash_field', ref: 'mismatch', excerpt: `dialog address ${report.game_error_at} does not match the dump's crash location; the files may be from different crashes` });
+  if (report.original_error) ev.push({ kind: 'crash_field', ref: 'original_error', excerpt: `Recursive error; the original error was: ${report.original_error}` });
+  if (report.inflate_match != null) ev.push({ kind: 'crash_field', ref: 'inflate_hashes', excerpt: report.inflate_match ? 'Reference hash = Disk hash: the file is bad on the server' : 'Reference hash != Disk hash: the player\'s downloaded copy is damaged' });
+  if (report.inflate_resource) ev.push({ kind: 'crash_field', ref: 'resource', excerpt: report.inflate_resource });
+  if (report.driver) ev.push({ kind: 'crash_field', ref: 'driver', excerpt: report.driver });
+  if (report.pool_validation_skipped) ev.push({ kind: 'crash_field', ref: 'unsupported_setup', excerpt: `pool size validation skipped ('moo 31337'): ${report.pool_validation_skipped}` });
   return ev;
+}
+
+/** The server's artifact (crashometry last_server_ver) against the known-bad builds list in signatures.json. */
+function artifactEvidence(report, signatures) {
+  const n = report.server_artifact;
+  if (!n) return [];
+  const ev = [{ kind: 'crash_field', ref: 'server_artifact', excerpt: `server artifact ${n}` }];
+  for (const k of signatures.known_bad_artifacts || []) {
+    if (n >= k.from && (k.to == null || n <= k.to)) {
+      ev.push({ kind: 'crash_field', ref: 'server_artifact_known_issue', excerpt: `artifact ${n} has a known issue: ${k.issue}${k.fixed_in ? ` (fixed in ${k.fixed_in})` : ' (not fixed yet)'}` });
+    }
+  }
+  return ev;
+}
+
+/** A family can carry variants: when a report field has a given value, owner/cause/fix change (e.g. inflate hashes). */
+function pickVariant(fam, report) {
+  for (const v of fam.variants || []) {
+    if (v.when && report[v.when.field] === v.when.equals) return v;
+  }
+  return null;
 }
 
 /** Full pipeline: artifacts in, v1 finding out. `now` is injectable for tests. */
@@ -379,7 +552,7 @@ export function analyze(inputs, signatures, { now = Date.now() } = {}) {
   };
 
   if (!best) {
-    const ev = crashEvidence(report).map((e) => ({ ...e, excerpt: excerpt(e.excerpt) }));
+    const ev = [...crashEvidence(report), ...artifactEvidence(report, signatures)].map((e) => ({ ...e, excerpt: excerpt(e.excerpt) }));
     for (const l of report.notable.slice(-5)) ev.push({ kind: 'log_line', ref: `log:${l.n}`, excerpt: excerpt(l.text) });
     const where = report.module ? `${report.module}+0x${report.offset || '?'}` : (report.hash || 'no signature found');
     const finding = {
@@ -406,11 +579,23 @@ export function analyze(inputs, signatures, { now = Date.now() } = {}) {
     return { report, finding, candidates };
   }
 
-  const fam = best.family;
+  const v = pickVariant(best.family, report);
+  const fam = v ? {
+    ...best.family,
+    owner: v.owner || best.family.owner,
+    owner_detail: v.owner_detail || best.family.owner_detail,
+    cause: { headline: v.headline || best.family.cause.headline, detail: v.detail || best.family.cause.detail },
+    fix: { ...best.family.fix, steps: v.steps || best.family.fix.steps },
+  } : best.family;
   const P = (t) => platformize(t, report.platform);
   const evidence = [];
   for (const h of best.hits) evidence.push({ kind: h.kind, ref: h.ref, excerpt: excerpt(h.excerpt) });
-  for (const e of crashEvidence(report)) if (!evidence.some((x) => x.ref === e.ref)) evidence.push({ ...e, excerpt: excerpt(e.excerpt) });
+  // One entry per evidence kind, except kinds that can legitimately repeat (several artifact issues, say).
+  const MULTI = new Set(['server_artifact_known_issue', 'rage_error']);
+  for (const e of [...crashEvidence(report), ...artifactEvidence(report, signatures)]) {
+    const ex = excerpt(e.excerpt);
+    if (!evidence.some((x) => x.ref === e.ref && (!MULTI.has(e.ref) || x.excerpt === ex))) evidence.push({ ...e, excerpt: ex });
+  }
 
   const finding = {
     ...base,
@@ -432,7 +617,7 @@ export function analyze(inputs, signatures, { now = Date.now() } = {}) {
       ...(report.session_ms ? { session_min: Math.round(report.session_ms / 60000) } : {}),
       ...Object.fromEntries(Object.entries(report.log_counts).map(([k, v]) => [k.toLowerCase().replace(/[^a-z0-9]+/g, '_'), v])),
     },
-    signature: { db_id: fam.id, version: Number(signatures.version.split('.')[1]) || 0 },
+    signature: { db_id: fam.id, version: Number(signatures.version.split('.')[1]) || 0, ...(v ? { variant: v.id } : {}) },
     count: 1,
   };
   return { report, finding, candidates };

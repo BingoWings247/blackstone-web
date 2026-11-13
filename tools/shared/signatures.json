@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "version": "0.6.3",
-  "updated": "2026-08-26",
+  "version": "0.7.0",
+  "updated": "2026-11-13",
   "notes": "Families are data, not code. Signals are scored by the engine; a family needs score >= thresholds.medium to be reported, else the result is unknown.crash. `role: definitive` signals alone can carry HIGH confidence. Offsets are per build and are only listed where they were observed first-hand; hashes are per-build aliases of build+module+offset. Sources: obs = observed in a real dump, kb = April 2026 knowledge base, ext = external report (1of1 aggregate, CFX forum). official_hashes: CitizenFX's own crash-data.json entries with an owner mapping added; the engine turns a matching hash into a crash.cfx_known.* family.",
   "thresholds": {
     "high": 8,
@@ -315,6 +315,41 @@
         ],
         "docs": "crash/corrupt-asset"
       },
+      "variants": [
+        {
+          "id": "player_cache",
+          "when": {
+            "field": "inflate_match",
+            "equals": false
+          },
+          "owner": "player",
+          "owner_detail": "Only this player's downloaded copy is bad. Clearing the server cache fixes it; the server owner doesn't need to change anything.",
+          "headline": "The downloaded copy of a server file is damaged",
+          "detail": "The file on the player's disk doesn't match the hash the server published (Reference hash differs from Disk hash), so the download or cached copy is damaged. The server's file is fine.",
+          "steps": [
+            "Close FiveM and delete %localappdata%\\FiveM\\FiveM.app\\data\\server-cache (that folder holds downloaded server files; data\\cache does not).",
+            "Rejoin the server so the file downloads again.",
+            "If it keeps coming back, check the disk (chkdsk) and any antivirus that scans the FiveM folder."
+          ]
+        },
+        {
+          "id": "server_file",
+          "when": {
+            "field": "inflate_match",
+            "equals": true
+          },
+          "owner": "server_owner",
+          "owner_detail": "Every player who downloads this file gets the same broken copy. The fix is replacing it on the server.",
+          "headline": "The file is damaged on the server",
+          "detail": "The player's copy matches the hash the server published (Reference hash = Disk hash), so the server is sending a broken file to everyone.",
+          "steps": [
+            "Find the file and the resource named in the dialog (the 'Resource name' line).",
+            "Replace the file with a good copy: re-export it, or re-upload it in binary mode (Git LFS pointer files and interrupted uploads are possible causes).",
+            "Restart the resource, and delete the server's cache/files/<resource>/ folder so new hashes are published.",
+            "Players then rejoin; they don't need to clear anything."
+          ]
+        }
+      ],
       "signals": [
         {
           "type": "log",
@@ -1159,10 +1194,11 @@
       "owner_detail": "The engine raised a RAGE error code rather than faulting. These are almost always content or script-driven (a bad asset or an invalid native call), so the server side is the place to start.",
       "cause": {
         "headline": "RAGE error raised by the engine",
-        "detail": "'RAGE error: 0x\u2026:NNN' is the engine's own assertion, not a memory fault. The code is engine-internal; the log lines before it (script errors, NUI callback errors) are the lead."
+        "detail": "The engine raised its own error instead of faulting. A named code ('RAGE error: ERR_GFX_STATE') says which subsystem; RedM's code-less form ('RAGE error: 0xFILE:LINE') names only an engine source file and line. The dump carries the code too: the crash writes to 0x10 followed by the code's id. The log lines just before it (script or NUI errors) are the lead."
       },
       "fix": {
         "steps": [
+          "The evidence names the error code. Its second part is the subsystem: GFX graphics, MEM memory, STR streaming, NET network, SYS system.",
           "Read the script/NUI errors immediately before the RAGE error line; the resource named there is the suspect.",
           "Stop that resource and reproduce.",
           "Submit the dump so the RAGE code can be mapped."
@@ -1180,10 +1216,36 @@
           "type": "module",
           "pattern": "^gta-core-(five|rdr3)\\.dll$",
           "weight": 1
+        },
+        {
+          "type": "write_class",
+          "value": "rage_marker",
+          "weight": 6,
+          "role": "definitive"
+        }
+      ],
+      "variants": [
+        {
+          "id": "graphics",
+          "when": {
+            "field": "rage_family",
+            "equals": "GFX"
+          },
+          "owner": "player",
+          "owner_detail": "A graphics error (ERR_GFX_*) comes from the player's graphics setup far more often than from server content: driver, overlays, graphics mods, or an unstable GPU.",
+          "headline": "Graphics error raised by the engine (ERR_GFX_*)",
+          "steps": [
+            "Remove graphics mods (ReShade, ENB) and turn off overlays (Discord, NVIDIA, Steam).",
+            "Update the graphics driver, or roll back if the crashes started after an update.",
+            "Remove any GPU overclock or undervolt and retry.",
+            "If several players on the same server get the same code, tell the server owner which area or vehicle it happens in."
+          ]
         }
       ],
       "sources": [
-        "obs:2021-09-04 RedM b1355 gta-core-rdr3.dll+20AB4 RAGE error 0x2914FEF:439 after NUI callback errors"
+        "obs:2021-09-04 RedM b1355 gta-core-rdr3.dll+20AB4 RAGE error 0x2914FEF:439 after NUI callback errors",
+        "src:citizenfx gta-core-rdr3/src/ErrorHandler.cpp:63-125 @5412ed86 (built into FiveM via gta-core-five component.lua)",
+        "obs:2026-11-13 five forum dumps: write target 0x10_<id> confirmed (ERR_MEM_EMBEDDEDALLOC_ALLOC, ERR_GFX_STATE, UNKNOWN = id 0)"
       ]
     },
     {
@@ -1599,6 +1661,352 @@
       "sources": [
         "obs:2026 citizen-devtools.dll+2CCD6 0xDEED, dump only"
       ]
+    },
+    {
+      "id": "drop_rate_limit",
+      "family": "drop.rate_limit",
+      "title": "Dropped by the server's rate limiter",
+      "severity": "MEDIUM",
+      "owner": "server_owner",
+      "owner_detail": "FXServer dropped the player because their client sent one kind of message faster than the server allows. A resource on the server (or a cheat on the client) is sending it; the player's PC and connection are not the cause.",
+      "cause": {
+        "headline": "Client exceeded a server rate limit",
+        "detail": "FXServer counts each message type per client (KeyedRateLimiter) and drops the client when the burst is exceeded. The message names the type: network events (TriggerServerEvent), state bag updates, server commands, net game events (damage, explosions) or latent-event ACKs."
+      },
+      "fix": {
+        "steps": [
+          "Note which overflow the message names: network event, state bag, server command, netGameEvent or latent event.",
+          "Network event, state bag or command: find the resource that sends it in a loop from the client (TriggerServerEvent, LocalPlayer.state or ExecuteCommand inside a fast loop) and throttle it.",
+          "netGameEvent overflow is usually weapon-damage or explosion spam: check for a cheat or a script spawning explosions.",
+          "Only raise the limit (rateLimiter_<key>_rate / _burst convars) after the sending resource is fixed."
+        ],
+        "docs": "drop/rate-limit"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Reliable network event overflow",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Unreliable network event overflow",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Reliable state bag packet overflow",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Reliable server command overflow",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "Reliable netGameEvent overflow",
+          "weight": 7,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "latent event ACK overflow",
+          "weight": 7,
+          "role": "definitive"
+        }
+      ],
+      "sources": [
+        "src:citizenfx citizen-server-impl ServerEventPacketHandler.cpp:38, StateBagPacketHandler.cpp:99, ServerCommandPacketHandler.cpp:81, NetGameEventPacketHandler.cpp:63, ReassembledEventPacketHandler.cpp:168, ServerResources.cpp:310 @5412ed86"
+      ]
+    },
+    {
+      "id": "enhanced_unsupported",
+      "family": "launch.enhanced_unsupported",
+      "title": "GTA V Enhanced selected",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "FiveM only runs on the Legacy version of GTA V. The selected game is the Enhanced edition.",
+      "cause": {
+        "headline": "FiveM does not support GTA V Enhanced",
+        "detail": "As of CitizenFX master on 2026-11-11 the launcher rejects Enhanced-edition folders and installs (GameSelect.cpp) and asks for GTA V Legacy."
+      },
+      "fix": {
+        "steps": [
+          "Install the Legacy version of GTA V.",
+          "When FiveM asks for the game folder, choose the Legacy install folder, not the Enhanced one."
+        ],
+        "docs": "launch/enhanced"
+      },
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "Enhanced edition of GTA V",
+          "weight": 8,
+          "role": "definitive"
+        },
+        {
+          "type": "log",
+          "pattern": "installation for GTA V Enhanced",
+          "weight": 8,
+          "role": "definitive"
+        },
+        {
+          "type": "module",
+          "pattern": "^gta5_enhanced\\.exe$",
+          "weight": 8,
+          "role": "definitive"
+        }
+      ],
+      "sources": [
+        "src:citizenfx client/launcher/GameSelect.cpp:155-166, 327-350 @5412ed86"
+      ]
+    },
+    {
+      "id": "hang_watchdog",
+      "family": "hang.watchdog",
+      "title": "Game stopped responding (watchdog)",
+      "severity": "MEDIUM",
+      "owner": "player",
+      "owner_detail": "The game stopped updating for too long and CitizenFX's watchdog ended it. With no reason given, the usual suspects are a script loop, the graphics driver, or an overlay.",
+      "cause": {
+        "headline": "The game was unresponsive for too long",
+        "detail": "CitizenFX's watchdog ends the game after it stops responding for a long time (45-90 s) and names a reason in brackets when it recognises one: NVIDIA drivers, script deadloop or DirectX query. These stops are never uploaded to CitizenFX."
+      },
+      "fix": {
+        "steps": [
+          "Note what was happening when it froze (joining, loading, in play) and whether other players froze at the same time.",
+          "If several players froze at once, it's the server's scripts: tell the server owner.",
+          "Otherwise update or roll back the graphics driver and turn off overlays (Discord, NVIDIA, Steam), then retry."
+        ],
+        "docs": "hang/watchdog"
+      },
+      "variants": [
+        {
+          "id": "script",
+          "when": {
+            "field": "hang_reason",
+            "equals": "script"
+          },
+          "owner": "server_owner",
+          "owner_detail": "A resource on the server ran a loop that never yielded. The fix is in that resource, not on the player's PC.",
+          "headline": "A script loop froze the game",
+          "detail": "The watchdog found a script running without yielding (script deadloop): a resource's thread ran a loop with no Wait, which freezes the game for everyone who runs it.",
+          "steps": [
+            "In the log, just before the freeze, look for a resource named in a warning or error; it's the first suspect.",
+            "Server owner: check that resource for loops without Wait().",
+            "Stop the resource and reproduce."
+          ]
+        },
+        {
+          "id": "nvidia",
+          "when": {
+            "field": "hang_reason",
+            "equals": "nvidia"
+          },
+          "owner": "player",
+          "headline": "NVIDIA driver hang",
+          "detail": "CitizenFX recognised a hang inside the NVIDIA driver. Its watchdog code flags drivers 472.00 to 497.10 for this and suggests 471.68.",
+          "steps": [
+            "Check the NVIDIA driver version (NVIDIA app or Device Manager).",
+            "If it is between 472.00 and 497.10, install a version outside that range (CitizenFX's code suggests 471.68).",
+            "Otherwise do a clean driver install and turn off overlays."
+          ]
+        },
+        {
+          "id": "directx",
+          "when": {
+            "field": "hang_reason",
+            "equals": "directx"
+          },
+          "owner": "player",
+          "headline": "Graphics hang (DirectX query)",
+          "detail": "The game was stuck waiting on the graphics card: a DirectX query never returned.",
+          "steps": [
+            "Update or roll back the graphics driver.",
+            "Turn off overlays and graphics mods (ReShade, ENB).",
+            "Remove any GPU overclock or undervolt and retry."
+          ]
+        }
+      ],
+      "signals": [
+        {
+          "type": "log",
+          "pattern": "has stopped responding",
+          "weight": 7,
+          "role": "definitive"
+        }
+      ],
+      "sources": [
+        "src:citizenfx citizen-devtools/src/ResourceTimeWarnings.cpp:197-216, 381 @5412ed86"
+      ]
+    },
+    {
+      "id": "nui_process",
+      "family": "crash.nui_process",
+      "title": "In-game browser crash (libcef.dll)",
+      "severity": "LOW",
+      "owner": "player",
+      "max_confidence": "MEDIUM",
+      "suppressed_by": [
+        "ros_handshake"
+      ],
+      "owner_detail": "The in-game browser (CEF) crashed. When that happens in a separate NUI process CitizenFX keeps the game running, so it often only breaks a UI.",
+      "cause": {
+        "headline": "The in-game browser crashed",
+        "detail": "libcef.dll is the Chromium engine that draws NUI (phones, menus, HUDs). CitizenFX doesn't end the game for a crash in a NUI subprocess and doesn't upload it; an NVIDIA driver crash in the browser's GPU process is treated the same way."
+      },
+      "fix": {
+        "steps": [
+          "If the game kept running, this is harmless unless it repeats.",
+          "If it repeats on one server, note which UI was open (phone, inventory, menu) and tell the server owner; that resource's page is the suspect.",
+          "If it happens on every server, update the graphics driver and turn off overlays."
+        ],
+        "docs": "crash/nui"
+      },
+      "signals": [
+        {
+          "type": "module",
+          "pattern": "^libcef\\.dll$",
+          "weight": 5,
+          "role": "definitive"
+        }
+      ],
+      "sources": [
+        "src:citizenfx client/launcher/MiniDump.cpp:1290-1314 @5412ed86"
+      ]
+    }
+  ],
+  "known_bad_artifacts": [
+    {
+      "from": 8509,
+      "to": 8509,
+      "issue": "state bags not replicated to clients",
+      "category": "statebags",
+      "fixed_in": null
+    },
+    {
+      "from": 10072,
+      "to": 10072,
+      "issue": "crashing when players join",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 10268,
+      "to": 10309,
+      "issue": "sv_experimentalNetGameEventHandler on by default; server crashes",
+      "category": "crash",
+      "fixed_in": 10367
+    },
+    {
+      "from": 12092,
+      "to": 12135,
+      "issue": "SetPlayerModel may cause SIGSEGV on some clients",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 12151,
+      "to": 12151,
+      "issue": "crashing with the newest title update",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 12180,
+      "to": 12180,
+      "issue": "voip-server-mumble.dll server crash (#3054)",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 12913,
+      "to": 13045,
+      "issue": "crashes when restarting Node.js 22 resources",
+      "category": "crash",
+      "fixed_in": 13068
+    },
+    {
+      "from": 13380,
+      "to": 13458,
+      "issue": "server crash from integer encoding (PR #3235)",
+      "category": "crash",
+      "fixed_in": 13528
+    },
+    {
+      "from": 14583,
+      "to": 14716,
+      "issue": "crash using onEntityBucketChange",
+      "category": "crash",
+      "fixed_in": 14758
+    },
+    {
+      "from": 14583,
+      "to": 14862,
+      "issue": "timeouts: latency measured in nanoseconds",
+      "category": "network",
+      "fixed_in": null
+    },
+    {
+      "from": 21547,
+      "to": 21547,
+      "issue": "unconfirmed reports of server natives erroring or crashing",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 27783,
+      "to": 27938,
+      "issue": "SIGSEGV crashes (#3915)",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 28626,
+      "to": 28626,
+      "issue": "packet loss and timeouts",
+      "category": "network",
+      "fixed_in": null
+    },
+    {
+      "from": 35636,
+      "to": 35636,
+      "issue": "Windows server can hang under weaponDamageEvent flooding (#4239)",
+      "category": "crash",
+      "fixed_in": null
+    },
+    {
+      "from": 36897,
+      "to": 36897,
+      "issue": "network-thread hitches and mass timeouts under reliable-queue pressure (#4244)",
+      "category": "network",
+      "fixed_in": 38004
+    },
+    {
+      "from": 37346,
+      "to": 37437,
+      "issue": "Linux server crashes starting escrow resources",
+      "category": "crash",
+      "fixed_in": 37474
+    },
+    {
+      "from": 38004,
+      "to": null,
+      "issue": "'Timed out after 60 seconds' drops (#4394, from bd84727); community workaround: 37850 or earlier",
+      "category": "network",
+      "fixed_in": null
+    },
+    {
+      "from": 38435,
+      "to": 38435,
+      "issue": "OneSync sync-tick memory corruption on Windows (#4384)",
+      "category": "crash",
+      "fixed_in": null
     }
   ],
   "research_queue": {

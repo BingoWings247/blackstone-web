@@ -1,0 +1,136 @@
+[
+  {
+    "name": "forum-2022-06-20-err-embeddedalloc",
+    "filename": "CfxCrashDump_2022_06_20_17_46_59.zip",
+    "dump": {
+      "module": "FiveM_b2545_GTAProcess.exe",
+      "offset": "12CE418",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x00000010BAFD530B",
+      "violation": "write",
+      "build": "2545"
+    },
+    "crashometry": {
+      "crash_hash": "fivem.exe+12CE418",
+      "crash_hash_id": 519215650,
+      "crash_hash_key": "carpet-nevada-west",
+      "crashometry_gpu_name": "NVIDIA GeForce RTX 3080 Ti",
+      "crashometry_last_server_ver": "master v1.0.0.5562"
+    },
+    "log": "[   3868656] [b2545_GTAProce]             MainThrd/ NoExcept: RAGE error: ERR_MEM_EMBEDDEDALLOC_ALLOC\n[   3868656] [b2545_GTAProce]             MainThrd/ A game error (at 00000001412ce41d) caused the game to stop working.\n[   3869734] [b2545_DumpServ]                18076/ Process crash captured. Crash dialog content:\n[   3869734] [b2545_DumpServ]                18076/ RAGE error: ERR_MEM_EMBEDDEDALLOC_ALLOC\n[   3869734] [b2545_DumpServ]                18076/ A game error (at 00000001412ce41d) caused the game to stop working.\n[   3869734] [b2545_DumpServ]                18076/ \n[   3869734] [b2545_DumpServ]                18076/ Out of game memory. Please reboot and restart the game.\n[   3871594] [b2545_DumpServ]                18076/ Crash report service returned si-[REDACTED]"
+  },
+  {
+    "name": "forum-2022-12-11-rage-unknown",
+    "filename": "forum zip (2022-12-11)",
+    "dump": {
+      "module": "FiveM_b2699_GTAProcess.exe",
+      "offset": "111B8E4",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x0000001000000000",
+      "violation": "write",
+      "build": "2699"
+    },
+    "crashometry": {
+      "crash_hash": "fivem.exe+111B8E4",
+      "crash_hash_id": 3877592031,
+      "crash_hash_key": "three-hawaii-carbon",
+      "crashometry_gpu_name": "NVIDIA GeForce GTX 1080",
+      "crashometry_last_server_ver": "master v1.0.0.6110"
+    },
+    "log": "[   3937140] [b2699_GTAProce]             MainThrd/ Error: RAGE error: UNKNOWN\n[   3937140] [b2699_GTAProce]             MainThrd/ A game error (at 000000014111b8e9) caused the game to stop working."
+  },
+  {
+    "name": "forum-2022-03-19-rage-unknown",
+    "filename": "forum zip (2022-03-19)",
+    "dump": {
+      "module": "FiveM_b2372_GTAProcess.exe",
+      "offset": "114CD44",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x0000001000000000",
+      "violation": "write",
+      "build": "2372"
+    },
+    "log": "[    465406] [b2372_GTAProce]             MainThrd/ NoExcept: RAGE error: UNKNOWN\n[    465406] [b2372_GTAProce]             MainThrd/ A game error (at 000000014114cd49) caused the game to stop working.\n[    470765] [b2372_DumpServ]                 9104/ Process crash captured. Crash dialog content:\n[    470765] [b2372_DumpServ]                 9104/ RAGE error: UNKNOWN\n[    470765] [b2372_DumpServ]                 9104/ A game error (at 000000014114cd49) caused the game to stop working."
+  },
+  {
+    "name": "forum-2024-02-13-redm-err-gfx-state",
+    "filename": "forum zip (2024-02-13)",
+    "dump": {
+      "module": "RedM_b1491_GTAProcess.exe",
+      "offset": "2599AA3",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x0000001040CDFD74",
+      "violation": "write",
+      "build": "1491"
+    },
+    "crashometry": {
+      "crash_hash": "redm.exe+2599AA3",
+      "crash_hash_id": 1353009853,
+      "crash_hash_key": "rugby-florida-orange",
+      "crashometry_last_server_ver": "master v1.0.0.7290"
+    },
+    "log": "[   2174140] [b1491_GTAProce]               Render/ Error: RAGE error: ERR_GFX_STATE\n[   2174140] [b1491_GTAProce]               Render/ A game error (at 0000000142599aa8) caused the game to stop working.\n[   2178312] [b1491_DumpServ]                17916/ Process crash captured. Crash dialog content:\n[   2178312] [b1491_DumpServ]                17916/ RAGE error: ERR_GFX_STATE\n[   2178312] [b1491_DumpServ]                17916/ A game error (at 0000000142599aa8) caused the game to stop working.\n[   2178312] [b1491_DumpServ]                17916/ \n[   2178312] [b1491_DumpServ]                17916/ Game error. Please reboot and restart the game.\n[   2180140] [b1491_DumpServ]                17916/ Error uploading crash: HTTP 0"
+  },
+  {
+    "name": "forum-2026-07-13-redm-vulkan-oom",
+    "filename": "CfxCrashDump_2026_07_13_20_06_50.zip",
+    "dump": {
+      "module": "glue.dll",
+      "offset": "937C2",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x000000000000DEED",
+      "violation": "write"
+    },
+    "crashometry": {
+      "crash_hash": "glue.dll+937C2",
+      "crash_hash_id": 2846177265,
+      "crash_hash_key": "washington-earth-orange",
+      "crashometry_gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+      "crashometry_nvidia_driver": "v610.62.0.0"
+    },
+    "log": "[     29672] [    DumpServer]                 7520/ Process crash captured. Crash dialog content:\n[     29688] [    DumpServer]                 7520/ Failed to allocate memory for Vulkan. VkResult: VK_ERROR_OUT_OF_DEVICE_MEMORY A device memory allocation has failed.\n[     29688] [    DumpServer]                 7520/ "
+  },
+  {
+    "name": "forum-2023-05-27-redm-codeless-16634bf9",
+    "filename": "CfxCrashDump_2023_05_27_21_00_04.zip",
+    "dump": {
+      "module": "gta-core-rdr3.dll",
+      "offset": "2ACB8",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x000000000000DEED",
+      "violation": "write"
+    },
+    "crashometry": {
+      "crash_hash": "gta-core-rdr3.dll+2ACB8",
+      "crash_hash_id": 3172782641,
+      "crash_hash_key": "delaware-spring-burger",
+      "crashometry_last_server_ver": "master v1.0.0.6457"
+    },
+    "log": "[     65485] [b1436_GTAProce] RageHddPriorityStrea/ Error: RAGE error: 0x16634BF9:435\n[     75282] [b1436_DumpServ]                 1764/ Process crash captured. Crash dialog content:\n[     75282] [b1436_DumpServ]                 1764/ RAGE error: 0x16634BF9:435\n[     75282] [b1436_DumpServ]                 1764/ \n[     81938] [b1436_DumpServ]                 1764/ Crash report service returned si-[REDACTED]"
+  },
+  {
+    "name": "forum-2025-04-12-redm-codeless-4757f5b0",
+    "filename": "CfxCrashDump_2025_04_12_17_20_29.zip",
+    "dump": {
+      "module": "gta-core-rdr3.dll",
+      "offset": "2B568",
+      "exception": "0xC0000005",
+      "exception_name": "ACCESS_VIOLATION",
+      "address": "0x000000000000DEED",
+      "violation": "write"
+    },
+    "crashometry": {
+      "crash_hash": "gta-core-rdr3.dll+2B568",
+      "crash_hash_id": 865295046,
+      "crash_hash_key": "single-harry-moon",
+      "crashometry_last_server_ver": "master v1.0.0.13185"
+    },
+    "log": "[   3265390] [    GTAProcess]             MainThrd/ Error: RAGE error: 0x4757F5B0:436\n[   3268312] [    DumpServer]                 8304/ Process crash captured. Crash dialog content:\n[   3268312] [    DumpServer]                 8304/ RAGE error: 0x4757F5B0:436"
+  }
+]
